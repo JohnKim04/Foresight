@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Foresight",
+    "slug": "foresight",
+    "version": "0.1.0",
+    "description": "A private journal for free-form life logs.",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "foresight",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.foresight.journal"
+    },
+    "android": {
+      "package": "com.foresight.journal"
+    },
+    "plugins": [
+      "@react-native-community/datetimepicker",
+      "expo-status-bar"
+    ]
+  }
+}
