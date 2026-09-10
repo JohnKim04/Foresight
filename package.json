@@ -1,0 +1,30 @@
+{
+  "name": "foresight",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo/AppEntry",
+  "scripts": {
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "check": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "doctor": "npx expo-doctor",
+    "bundle": "expo export --platform all --output-dir dist",
+    "verify": "npm run check && npm test && npm run doctor && npm run bundle"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "9.1.0",
+    "expo": "~57.0.21",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "@types/react": "~19.2.8",
+    "tsx": "^4.21.0",
+    "typescript": "~6.0.3"
+  }
+}

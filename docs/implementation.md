@@ -1,5 +1,7 @@
 # Foresight Implementation Notes
 
+> **Current MVP scope:** The active build is a local iOS and Android free-form text journal with no LLM or structured-data layer. Follow [mvp-plan.md](mvp-plan.md) and its linked build notes for implementation decisions. The ideas below are retained for later consideration and are not current MVP requirements.
+
 Early technical decisions and open questions. This document records how product ideas may be implemented; it is not a finalized architecture.
 
 ## Input and Parsing
