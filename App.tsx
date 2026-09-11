@@ -8,11 +8,12 @@ import { TrendRange } from "./src/category-trends";
 import { JournalScreen } from "./src/components/JournalScreen";
 import { LogComposerScreen, PickerMode } from "./src/components/LogComposerScreen";
 import { LogDetailScreen } from "./src/components/LogDetailScreen";
+import { OutcomeCheckInScreen } from "./src/components/OutcomeCheckInScreen";
 import { ScreenTabs } from "./src/components/ScreenTabs";
 import { TrendsScreen } from "./src/components/TrendsScreen";
 import { createJournalController } from "./src/journal-controller";
-import { JournalRoute, journalRoute, leaveFocusedRoute, openDetail, openEditComposer, openNewComposer, resolveRoute, routeAfterSave, topLevelRoute } from "./src/journal-navigation";
-import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION } from "./src/journal-storage";
+import { JournalRoute, journalRoute, leaveFocusedRoute, openDetail, openEditComposer, openNewComposer, openOutcomeCheckIn, resolveRoute, routeAfterSave, topLevelRoute } from "./src/journal-navigation";
+import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION, OutcomeValue } from "./src/journal-storage";
 
 const blankSnapshot: JournalSnapshot = { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: false, ignoredEntries: 0 };
 
@@ -30,6 +31,7 @@ export default function App() {
   const [eventDate, setEventDate] = useState(() => new Date());
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [outcomeNote, setOutcomeNote] = useState("");
   const [historyCategoryId, setHistoryCategoryId] = useState<string | null>(null);
   const [trendRange, setTrendRange] = useState<TrendRange>(7);
   const [trendCategoryId, setTrendCategoryId] = useState<string | null>(null);
@@ -58,12 +60,12 @@ export default function App() {
   }, [controller]);
 
   useEffect(() => {
-    const nextRoute = resolveRoute(route, new Set(journal.entries.map((entry) => entry.id)));
+    const nextRoute = resolveRoute(route, new Set(journal.entries.map((entry) => entry.id)), new Set(journal.outcomeCheckIns.map((checkIn) => checkIn.id)));
     if (nextRoute !== route) {
       setRoute(nextRoute);
       setStatus("That log is no longer available.");
     }
-  }, [journal.entries, route]);
+  }, [journal.entries, journal.outcomeCheckIns, route]);
 
   function cancelComposer() {
     setRoute(leaveFocusedRoute(route));
@@ -73,6 +75,12 @@ export default function App() {
 
   function closeDetail() {
     setRoute(journalRoute);
+    setStatus("");
+  }
+
+  function closeOutcomeCheckIn() {
+    setRoute(leaveFocusedRoute(route));
+    setOutcomeNote("");
     setStatus("");
   }
 
@@ -86,10 +94,57 @@ export default function App() {
         cancelComposer();
         return true;
       }
+      if (route.screen === "outcome-check-in") {
+        closeOutcomeCheckIn();
+        return true;
+      }
       return false;
     });
     return () => subscription.remove();
   }, [route]);
+
+  function openOutcomeCheckInForEntry(entry: JournalEntry) {
+    const existing = [...journal.outcomeCheckIns].reverse().find((checkIn) => checkIn.entryId === entry.id && checkIn.phase === "immediate") ?? null;
+    setOutcomeNote(existing?.note ?? "");
+    setStatus("");
+    setRoute(openOutcomeCheckIn(entry.id, existing?.id ?? null));
+  }
+
+  async function handleOutcomeResponse(response: { status: "answered"; overall: OutcomeValue } | { status: "not_sure" }) {
+    if (route.screen !== "outcome-check-in") return;
+    try {
+      let next: JournalSnapshot;
+      if (route.checkInId) {
+        next = await controller.answerOutcomeCheckIn(journal, { id: route.checkInId, ...response, note: outcomeNote });
+      } else {
+        const created = await controller.createOutcomeCheckIn(journal, { entryId: route.entryId, phase: "immediate" });
+        next = await controller.answerOutcomeCheckIn(created.journal, { id: created.checkIn.id, ...response, note: outcomeNote });
+      }
+      setJournal(next);
+      setOutcomeNote("");
+      setRoute(openDetail(route.entryId));
+      setStatus(response.status === "not_sure" ? "Reflection saved as not sure yet." : "Reflection saved.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not save this reflection.");
+    }
+  }
+
+  function confirmOutcomeRemoval(entryId: string, checkInId: string) {
+    Alert.alert("Remove reflection?", "This removes the feeling check-in but keeps your journal log.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => void handleOutcomeRemoval(entryId, checkInId) },
+    ]);
+  }
+
+  async function handleOutcomeRemoval(entryId: string, checkInId: string) {
+    try {
+      setJournal(await controller.removeOutcomeCheckIn(journal, checkInId));
+      setStatus("Reflection removed.");
+      setRoute(openDetail(entryId));
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not remove this reflection.");
+    }
+  }
 
   function openComposerForNewLog() {
     resetComposer();
@@ -193,12 +248,17 @@ export default function App() {
   }
 
   const detailEntry = route.screen === "detail" ? journal.entries.find((entry) => entry.id === route.entryId) : null;
+  const detailImmediateCheckIn = detailEntry ? [...journal.outcomeCheckIns].reverse().find((checkIn) => checkIn.entryId === detailEntry.id && checkIn.phase === "immediate") ?? null : null;
+  const outcomeEntry = route.screen === "outcome-check-in" ? journal.entries.find((entry) => entry.id === route.entryId) : null;
+  const outcomeCheckIn = route.screen === "outcome-check-in" && route.checkInId ? journal.outcomeCheckIns.find((checkIn) => checkIn.id === route.checkInId) ?? null : null;
 
   if (isLoading) return <SafeAreaProvider><SafeAreaView style={styles.loadingScreen}><StatusBar style="dark" /><ActivityIndicator color={colors.sageDark} /><Text style={styles.loadingText}>Opening your journal…</Text></SafeAreaView></SafeAreaProvider>;
 
   let content: ReactNode;
   if (route.screen === "detail" && detailEntry) {
-    content = <LogDetailScreen entry={detailEntry} journal={journal} status={status} onBack={closeDetail} onEdit={() => openComposerForEdit(detailEntry)} />;
+    content = <LogDetailScreen entry={detailEntry} journal={journal} immediateCheckIn={detailImmediateCheckIn} status={status} onBack={closeDetail} onEdit={() => openComposerForEdit(detailEntry)} onCheckIn={() => openOutcomeCheckInForEntry(detailEntry)} onRemoveCheckIn={() => detailImmediateCheckIn && confirmOutcomeRemoval(detailEntry.id, detailImmediateCheckIn.id)} />;
+  } else if (route.screen === "outcome-check-in" && outcomeEntry) {
+    content = <OutcomeCheckInScreen body={outcomeEntry.body} eventAt={outcomeEntry.eventAt} checkIn={outcomeCheckIn} note={outcomeNote} status={status} onNoteChange={setOutcomeNote} onRespond={(response) => void handleOutcomeResponse(response)} onBack={closeOutcomeCheckIn} />;
   } else if (route.screen === "composer") {
     content = <LogComposerScreen journal={journal} mode={route.mode} body={body} eventDate={eventDate} categoryIds={categoryIds} newCategoryName={newCategoryName} pickerMode={pickerMode} status={status} onBodyChange={setBody} onPickerModeChange={setPickerMode} onDateValueChange={handleDateValueChange} onPickerDismiss={handleDatePickerDismiss} onCategoryToggle={(id) => setCategoryIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onNewCategoryNameChange={setNewCategoryName} onCreateCategory={() => void handleCreateCategory()} onArchiveRequest={confirmArchive} onSave={() => void handleSave()} onCancel={cancelComposer} />;
   } else {
