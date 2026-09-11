@@ -1,11 +1,11 @@
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import DateTimePicker, { DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { formatLogAccessibilityDateTime, formatLogDateTime } from "../journal-format";
 import { JournalCategory, JournalSnapshot } from "../journal-storage";
 
 export type PickerMode = "date" | "time" | "datetime" | null;
 
-export function LogComposerScreen({ journal, mode, body, eventDate, categoryIds, newCategoryName, pickerMode, status, onBodyChange, onPickerModeChange, onDateChange, onCategoryToggle, onNewCategoryNameChange, onCreateCategory, onArchiveRequest, onSave, onCancel }: {
+export function LogComposerScreen({ journal, mode, body, eventDate, categoryIds, newCategoryName, pickerMode, status, onBodyChange, onPickerModeChange, onDateValueChange, onPickerDismiss, onCategoryToggle, onNewCategoryNameChange, onCreateCategory, onArchiveRequest, onSave, onCancel }: {
   journal: JournalSnapshot;
   mode: "new" | "edit";
   body: string;
@@ -16,7 +16,8 @@ export function LogComposerScreen({ journal, mode, body, eventDate, categoryIds,
   status: string;
   onBodyChange: (value: string) => void;
   onPickerModeChange: (value: PickerMode | ((current: PickerMode) => PickerMode)) => void;
-  onDateChange: (event: DateTimePickerEvent, date?: Date) => void;
+  onDateValueChange: (event: DateTimePickerChangeEvent, date: Date) => void;
+  onPickerDismiss: () => void;
   onCategoryToggle: (id: string) => void;
   onNewCategoryNameChange: (value: string) => void;
   onCreateCategory: () => void;
@@ -35,7 +36,8 @@ export function LogComposerScreen({ journal, mode, body, eventDate, categoryIds,
       <TextInput accessibilityLabel="What happened?" multiline maxLength={5000} onChangeText={onBodyChange} placeholder="Write about anything." placeholderTextColor={colors.placeholder} style={styles.textArea} textAlignVertical="top" value={body} />
       <Text style={styles.label}>When did it happen?</Text>
       <Pressable accessibilityHint="Opens the date and time picker" accessibilityLabel={`Event time: ${formatLogAccessibilityDateTime(eventDate.toISOString())}`} onPress={() => onPickerModeChange((current) => current ? null : Platform.OS === "ios" ? "datetime" : "date")} style={styles.dateButton}><Text style={styles.dateButtonText}>{formatLogDateTime(eventDate.toISOString())}</Text><Text style={styles.dateButtonEdit}>Change</Text></Pressable>
-      {pickerMode && <DateTimePicker display={Platform.OS === "ios" ? "inline" : "default"} mode={pickerMode} onChange={onDateChange} value={eventDate} />}
+      {pickerMode && Platform.OS === "ios" && <DateTimePicker display="inline" mode={pickerMode} onDismiss={onPickerDismiss} onValueChange={onDateValueChange} value={eventDate} />}
+      {pickerMode && Platform.OS !== "ios" && <DateTimePicker display="default" mode={pickerMode === "time" ? "time" : "date"} onDismiss={onPickerDismiss} onValueChange={onDateValueChange} value={eventDate} />}
       <Text style={styles.label}>Categories</Text>
       <View style={styles.chips}>{activeCategories.map((category) => <Pressable key={category.id} accessibilityRole="checkbox" accessibilityState={{ checked: categoryIds.includes(category.id) }} onPress={() => onCategoryToggle(category.id)} style={[styles.chip, categoryIds.includes(category.id) && styles.chipSelected]}><Text style={[styles.chipText, categoryIds.includes(category.id) && styles.chipTextSelected]}>{category.name}</Text></Pressable>)}{archivedDraftCategories.map((category) => <View key={category.id} style={styles.archivedChip}><Text style={styles.archivedChipText}>{category.name} (archived)</Text></View>)}</View>
       <View style={styles.addCategory}><TextInput accessibilityLabel="New category name" onChangeText={onNewCategoryNameChange} onSubmitEditing={onCreateCategory} placeholder="Create a category" placeholderTextColor={colors.placeholder} style={styles.categoryInput} value={newCategoryName} /><Pressable accessibilityLabel="Add category" onPress={onCreateCategory} style={styles.addButton}><Text style={styles.addButtonText}>Add</Text></Pressable></View>
