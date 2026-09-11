@@ -1,0 +1,36 @@
+import { useMemo } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { allDailyActivity, categoryTrends, dailyActivity, TrendRange } from "../category-trends";
+import { JournalSnapshot } from "../journal-storage";
+
+export function TrendsScreen({ journal, range, selectedCategoryId, onRangeChange, onCategoryChange }: {
+  journal: JournalSnapshot;
+  range: TrendRange;
+  selectedCategoryId: string | null;
+  onRangeChange: (range: TrendRange) => void;
+  onCategoryChange: (id: string | null) => void;
+}) {
+  const trendRows = useMemo(() => categoryTrends(journal.entries, journal.categories, range), [journal.entries, journal.categories, range]);
+  const allActivity = useMemo(() => allDailyActivity(journal.entries, range), [journal.entries, range]);
+  const allActivityCount = allActivity.reduce((total, day) => total + day.count, 0);
+  const allActivityDays = allActivity.filter((day) => day.count > 0).length;
+  const maxAllActivity = Math.max(1, ...allActivity.map((day) => day.count));
+  const categoriesWithActivity = trendRows.filter((trend) => trend.currentCount > 0);
+  const displayedTrendId = selectedCategoryId && categoriesWithActivity.some((trend) => trend.category.id === selectedCategoryId) ? selectedCategoryId : null;
+  const activity = useMemo(() => displayedTrendId ? dailyActivity(journal.entries, displayedTrendId, range) : allActivity, [allActivity, displayedTrendId, journal.entries, range]);
+  const maxActivity = displayedTrendId ? Math.max(1, ...activity.map((day) => day.count)) : maxAllActivity;
+  const selectedTrend = displayedTrendId ? trendRows.find((trend) => trend.category.id === displayedTrendId) : null;
+
+  return <>
+    <View style={styles.intro}><Text style={styles.title}>Trends</Text></View>
+    <View style={styles.rangeRow}>{([7, 30] as TrendRange[]).map((nextRange) => <Pressable key={nextRange} accessibilityState={{ selected: range === nextRange }} onPress={() => onRangeChange(nextRange)} style={[styles.range, range === nextRange && styles.rangeSelected]}><Text style={[styles.rangeText, range === nextRange && styles.rangeTextSelected]}>Last {nextRange} days</Text></Pressable>)}</View>
+    <View style={styles.card}><Text style={styles.eyebrow}>Activity</Text><Text style={styles.cardTitle}>Choose a view</Text><Pressable accessibilityState={{ selected: !displayedTrendId }} onPress={() => onCategoryChange(null)} style={[styles.trendRow, !displayedTrendId && styles.trendRowSelected]}><View><Text style={styles.trendName}>All activity</Text><Text style={styles.trendDescription}>{allActivityCount === 1 ? "1 log" : `${allActivityCount} logs`} · {allActivityDays === 0 ? "no active days" : `${allActivityDays} active ${allActivityDays === 1 ? "day" : "days"}`}</Text></View><Text style={styles.trendCount}>{allActivityCount}</Text></Pressable>{categoriesWithActivity.map((trend) => <Pressable key={trend.category.id} accessibilityState={{ selected: displayedTrendId === trend.category.id }} onPress={() => onCategoryChange(trend.category.id)} style={[styles.trendRow, displayedTrendId === trend.category.id && styles.trendRowSelected]}><View><Text style={styles.trendName}>{trend.category.name}{trend.category.archivedAt ? " (archived)" : ""}</Text><Text style={styles.trendDescription}>{trend.currentCount} {trend.currentCount === 1 ? "log" : "logs"} · {trend.change === 0 ? "unchanged" : `${trend.change > 0 ? "+" : ""}${trend.change} vs previous ${range} days`}</Text></View><Text style={styles.trendCount}>{trend.currentCount}</Text></Pressable>)}</View>
+    <View style={styles.card}><Text style={styles.eyebrow}>Activity over time</Text><Text style={styles.cardTitle}>{selectedTrend?.category.name ?? "All activity"}</Text><View style={styles.bars}>{activity.map((day) => <View key={day.day} style={styles.barColumn}><View style={styles.barTrack}><View style={[styles.bar, { height: `${(day.count / maxActivity) * 100}%` }]} /></View></View>)}</View><Text style={styles.chartCaption}>{activity.filter((day) => day.count > 0).length === 0 ? `No logs in the last ${range} days` : `${activity.filter((day) => day.count > 0).length} active ${activity.filter((day) => day.count > 0).length === 1 ? "day" : "days"} in the last ${range} days`}</Text></View>
+  </>;
+}
+
+const colors = { surface: "#FFFEFA", ink: "#20231F", muted: "#667067", line: "#D9DDD5", sage: "#55715F", sageDark: "#34503F" };
+const styles = StyleSheet.create({
+  intro: { paddingBottom: 6, paddingTop: 12 }, eyebrow: { color: colors.sageDark, fontSize: 11, fontWeight: "800", letterSpacing: 1.35, textTransform: "uppercase" }, title: { color: colors.ink, fontFamily: Platform.select({ ios: "Georgia", android: "serif" }), fontSize: 44, letterSpacing: -1.6, lineHeight: 48 }, rangeRow: { flexDirection: "row", gap: 8 }, range: { alignItems: "center", backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 100, borderWidth: 1, flex: 1, paddingVertical: 10 }, rangeSelected: { backgroundColor: colors.sageDark, borderColor: colors.sageDark }, rangeText: { color: colors.ink, fontSize: 14, fontWeight: "800" }, rangeTextSelected: { color: "#FFFFFF" },
+  card: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 18, borderWidth: 1, gap: 12, padding: 20 }, cardTitle: { color: colors.ink, fontFamily: Platform.select({ ios: "Georgia", android: "serif" }), fontSize: 25, letterSpacing: -0.45, lineHeight: 30 }, emptyCard: { alignItems: "center", justifyContent: "center", minHeight: 160 }, emptyTitle: { color: colors.ink, fontFamily: Platform.select({ ios: "Georgia", android: "serif" }), fontSize: 22 }, emptyText: { color: colors.muted, fontSize: 14, lineHeight: 20, textAlign: "center" }, trendRow: { alignItems: "center", borderTopColor: colors.line, borderTopWidth: 1, flexDirection: "row", justifyContent: "space-between", marginTop: 2, paddingTop: 12 }, trendRowSelected: { backgroundColor: "#F0F5EE", marginHorizontal: -8, paddingHorizontal: 8 }, trendName: { color: colors.ink, fontSize: 15, fontWeight: "800" }, trendDescription: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 2 }, trendCount: { color: colors.sageDark, fontSize: 22, fontWeight: "800", paddingLeft: 12 }, bars: { alignItems: "flex-end", flexDirection: "row", gap: 2, height: 120 }, barColumn: { flex: 1, height: "100%" }, barTrack: { backgroundColor: "#E7ECE4", borderRadius: 3, height: "100%", justifyContent: "flex-end", overflow: "hidden" }, bar: { backgroundColor: colors.sage, borderRadius: 3, minHeight: 0 }, chartCaption: { color: colors.muted, fontSize: 12 },
+});
