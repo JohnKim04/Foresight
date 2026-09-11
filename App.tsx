@@ -12,10 +12,10 @@ import { LogDetailScreen } from "./src/components/LogDetailScreen";
 import { OutcomeCheckInScreen } from "./src/components/OutcomeCheckInScreen";
 import { ScheduleCheckInScreen } from "./src/components/ScheduleCheckInScreen";
 import { ScreenTabs } from "./src/components/ScreenTabs";
-import { TrendsScreen } from "./src/components/TrendsScreen";
+import { TrendsScreen, TrendsView } from "./src/components/TrendsScreen";
 import { createJournalController } from "./src/journal-controller";
 import { JournalRoute, journalRoute, leaveFocusedRoute, openDetail, openEditComposer, openNewComposer, openOutcomeCheckIn, openScheduleCheckIn, resolveRoute, routeAfterSave, topLevelRoute } from "./src/journal-navigation";
-import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION, OutcomeCheckIn, OutcomeValue } from "./src/journal-storage";
+import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION, OutcomeCheckIn, OutcomePhase, OutcomeValue } from "./src/journal-storage";
 
 const blankSnapshot: JournalSnapshot = { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: false, ignoredEntries: 0 };
 
@@ -38,6 +38,8 @@ export default function App() {
   const [historyCategoryId, setHistoryCategoryId] = useState<string | null>(null);
   const [trendRange, setTrendRange] = useState<TrendRange>(7);
   const [trendCategoryId, setTrendCategoryId] = useState<string | null>(null);
+  const [trendsView, setTrendsView] = useState<TrendsView>("activity");
+  const [outcomePhase, setOutcomePhase] = useState<OutcomePhase>("delayed");
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
   const [status, setStatus] = useState("");
 
@@ -324,7 +326,7 @@ export default function App() {
     content = <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}><Text style={styles.wordmark}>Foresight</Text></View>
       <ScreenTabs screen={topLevel} onChange={(screen) => { setRoute(topLevelRoute(screen)); setStatus(""); }} />
-      {topLevel === "journal" ? <JournalScreen journal={journal} historyCategoryId={historyCategoryId} status={status} onNewLog={openComposerForNewLog} onHistoryFilterChange={setHistoryCategoryId} onOpenEntry={(id) => { setStatus(""); setRoute(openDetail(id)); }} onRecoveryRequest={confirmRecovery} /> : topLevel === "check-ins" ? <CheckInQueueScreen journal={journal} now={queueNow} status={status} onAnswer={openOutcomeCheckInFromQueue} onReschedule={(checkIn) => { const entry = journal.entries.find((item) => item.id === checkIn.entryId); if (entry) openScheduleCheckInForEntry(entry, checkIn, "check-ins"); }} onSkip={(checkIn) => void handleSkipDelayedCheckIn(checkIn)} /> : <TrendsScreen journal={journal} range={trendRange} selectedCategoryId={trendCategoryId} onRangeChange={setTrendRange} onCategoryChange={setTrendCategoryId} />}
+      {topLevel === "journal" ? <JournalScreen journal={journal} historyCategoryId={historyCategoryId} status={status} onNewLog={openComposerForNewLog} onHistoryFilterChange={setHistoryCategoryId} onOpenEntry={(id) => { setStatus(""); setRoute(openDetail(id)); }} onRecoveryRequest={confirmRecovery} /> : topLevel === "check-ins" ? <CheckInQueueScreen journal={journal} now={queueNow} status={status} onAnswer={openOutcomeCheckInFromQueue} onReschedule={(checkIn) => { const entry = journal.entries.find((item) => item.id === checkIn.entryId); if (entry) openScheduleCheckInForEntry(entry, checkIn, "check-ins"); }} onSkip={(checkIn) => void handleSkipDelayedCheckIn(checkIn)} /> : <TrendsScreen journal={journal} range={trendRange} selectedCategoryId={trendCategoryId} view={trendsView} outcomePhase={outcomePhase} onRangeChange={setTrendRange} onCategoryChange={setTrendCategoryId} onViewChange={(view) => { setTrendsView(view); if (view === "outcomes" && trendRange === 7) setTrendRange(30); }} onOutcomePhaseChange={setOutcomePhase} onOpenEntry={(id) => { setStatus(""); setRoute(openDetail(id)); }} />}
     </ScrollView>;
   }
 
