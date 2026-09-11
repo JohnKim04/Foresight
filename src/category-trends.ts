@@ -1,6 +1,6 @@
 import { JournalCategory, JournalEntry } from "./journal-storage";
 
-export type TrendRange = 7 | 30;
+export type TrendRange = 7 | 30 | 90;
 export type CategoryTrend = { category: JournalCategory; currentCount: number; previousCount: number; change: number };
 export type DailyActivity = { day: string; count: number };
 
