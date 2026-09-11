@@ -1,9 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { StatusBar } from "expo-status-bar";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, BackHandler, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { DateTimePickerChangeEvent } from "@react-native-community/datetimepicker";
 import { TrendRange } from "./src/category-trends";
 import { JournalScreen } from "./src/components/JournalScreen";
 import { LogComposerScreen, PickerMode } from "./src/components/LogComposerScreen";
@@ -152,11 +152,7 @@ export default function App() {
     ]);
   }
 
-  function handleDateChange(event: DateTimePickerEvent, date?: Date) {
-    if (event.type !== "set" || !date) {
-      if (Platform.OS !== "ios") setPickerMode(null);
-      return;
-    }
+  function handleDateValueChange(_event: DateTimePickerChangeEvent, date: Date) {
     if (Platform.OS === "android" && pickerMode === "date") {
       const next = new Date(eventDate);
       next.setFullYear(date.getFullYear(), date.getMonth(), date.getDate());
@@ -172,6 +168,10 @@ export default function App() {
       return;
     }
     setEventDate(date);
+  }
+
+  function handleDatePickerDismiss() {
+    if (Platform.OS !== "ios") setPickerMode(null);
   }
 
   function confirmRecovery() {
@@ -200,7 +200,7 @@ export default function App() {
   if (route.screen === "detail" && detailEntry) {
     content = <LogDetailScreen entry={detailEntry} journal={journal} status={status} onBack={closeDetail} onEdit={() => openComposerForEdit(detailEntry)} />;
   } else if (route.screen === "composer") {
-    content = <LogComposerScreen journal={journal} mode={route.mode} body={body} eventDate={eventDate} categoryIds={categoryIds} newCategoryName={newCategoryName} pickerMode={pickerMode} status={status} onBodyChange={setBody} onPickerModeChange={setPickerMode} onDateChange={handleDateChange} onCategoryToggle={(id) => setCategoryIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onNewCategoryNameChange={setNewCategoryName} onCreateCategory={() => void handleCreateCategory()} onArchiveRequest={confirmArchive} onSave={() => void handleSave()} onCancel={cancelComposer} />;
+    content = <LogComposerScreen journal={journal} mode={route.mode} body={body} eventDate={eventDate} categoryIds={categoryIds} newCategoryName={newCategoryName} pickerMode={pickerMode} status={status} onBodyChange={setBody} onPickerModeChange={setPickerMode} onDateValueChange={handleDateValueChange} onPickerDismiss={handleDatePickerDismiss} onCategoryToggle={(id) => setCategoryIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} onNewCategoryNameChange={setNewCategoryName} onCreateCategory={() => void handleCreateCategory()} onArchiveRequest={confirmArchive} onSave={() => void handleSave()} onCancel={cancelComposer} />;
   } else {
     const topLevel = route.screen === "trends" ? "trends" : "journal";
     content = <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
