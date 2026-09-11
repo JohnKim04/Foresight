@@ -4,6 +4,8 @@ import { allDailyActivity, categoryTrends, dailyActivity } from "../src/category
 import {
   archiveCategory,
   BACKUP_KEY_PREFIX,
+  answerOutcomeCheckIn,
+  createOutcomeCheckIn,
   createCategory,
   createEntry,
   defaultCategories,
@@ -14,6 +16,7 @@ import {
   recoverUnreadableStorage,
   saveJournal,
   STORAGE_KEY,
+  skipOutcomeCheckIn,
   updateEntry,
 } from "../src/journal-storage";
 
@@ -46,7 +49,7 @@ test("creates, updates, saves, and reloads category assignments", async () => {
   const categories = createCategory(defaultCategories(), "Reading", "reading");
   const entry = createEntry({ body: "  Finished a chapter. ", eventAt: firstTime, categoryIds: ["reading", "reading"] }, { id: "one", createdAt: firstTime });
   const [updated] = updateEntry([entry], "one", { body: "Finished two chapters.", eventAt: laterTime, categoryIds: ["reading"] }, laterTime);
-  await saveJournal({ version: JOURNAL_VERSION, entries: [updated], categories }, storage);
+  await saveJournal({ version: JOURNAL_VERSION, entries: [updated], categories, outcomeCheckIns: [] }, storage);
 
   const journal = await loadEntries(storage);
   assert.equal(journal.entries[0].body, "Finished two chapters.");
@@ -65,10 +68,10 @@ test("validates custom categories, archives without changing history, and filter
   assert.deepEqual(filterEntriesByCategory([entry], "reading").map((item) => item.id), ["one"]);
 });
 
-test("drops malformed records and unknown category assignments from a v2 envelope", async () => {
+test("migrates a v2 envelope while dropping malformed records and unknown category assignments", async () => {
   const storage = memoryStorage();
   await storage.setItem(STORAGE_KEY, JSON.stringify({
-    version: JOURNAL_VERSION,
+    version: 2,
     categories: [{ id: "work", name: "Work", archivedAt: null }, { id: "broken", name: "", archivedAt: null }],
     entries: [
       { id: "good", body: "Valid", eventAt: firstTime, createdAt: firstTime, updatedAt: firstTime, categoryIds: ["work", "missing", "work"] },
@@ -80,7 +83,40 @@ test("drops malformed records and unknown category assignments from a v2 envelop
   assert.equal(journal.entries.length, 1);
   assert.deepEqual(journal.entries[0].categoryIds, ["work"]);
   assert.equal(journal.categories.length, 1);
+  assert.deepEqual(journal.outcomeCheckIns, []);
   assert.equal(journal.ignoredEntries, 2);
+});
+
+test("persists only valid v3 outcome check-ins that reference existing logs", async () => {
+  const storage = memoryStorage();
+  await storage.setItem(STORAGE_KEY, JSON.stringify({
+    version: JOURNAL_VERSION,
+    categories: defaultCategories(),
+    entries: [{ id: "one", body: "Valid", eventAt: firstTime, createdAt: firstTime, updatedAt: firstTime, categoryIds: [] }],
+    outcomeCheckIns: [
+      { id: "valid", entryId: "one", phase: "immediate", status: "answered", dueAt: null, answeredAt: laterTime, overall: -1, note: "A little drained", excludedFromAnalysis: false, createdAt: firstTime, updatedAt: laterTime },
+      { id: "unknown-log", entryId: "missing", phase: "immediate", status: "answered", dueAt: null, answeredAt: laterTime, overall: 1, note: "", excludedFromAnalysis: false, createdAt: firstTime, updatedAt: laterTime },
+      { id: "bad-status", entryId: "one", phase: "immediate", status: "answered", dueAt: null, answeredAt: null, overall: 1, note: "", excludedFromAnalysis: false, createdAt: firstTime, updatedAt: laterTime },
+    ],
+  }));
+
+  const journal = await loadEntries(storage);
+  assert.deepEqual(journal.outcomeCheckIns.map((checkIn) => [checkIn.id, checkIn.overall, checkIn.note]), [["valid", -1, "A little drained"]]);
+  assert.equal(journal.ignoredEntries, 2);
+});
+
+test("creates, answers, and skips one-dimensional outcome check-ins", () => {
+  const immediate = createOutcomeCheckIn({ entryId: "one", phase: "immediate" }, { id: "outcome-1", createdAt: firstTime });
+  assert.deepEqual(immediate, {
+    id: "outcome-1", entryId: "one", phase: "immediate", status: "pending", dueAt: null, answeredAt: null,
+    overall: null, note: "", excludedFromAnalysis: false, createdAt: firstTime, updatedAt: firstTime,
+  });
+  const answered = answerOutcomeCheckIn([immediate], "outcome-1", { status: "answered", overall: 2, note: "Felt restored." }, laterTime);
+  assert.deepEqual(answered[0], { ...immediate, status: "answered", overall: 2, note: "Felt restored.", answeredAt: laterTime, updatedAt: laterTime });
+  const skipped = skipOutcomeCheckIn(answered, "outcome-1", "2026-09-10T12:00:00.000Z");
+  assert.deepEqual(skipped[0], { ...answered[0], status: "skipped", overall: null, answeredAt: null, updatedAt: "2026-09-10T12:00:00.000Z" });
+  assert.throws(() => createOutcomeCheckIn({ entryId: "one", phase: "delayed" }, { id: "outcome-2", createdAt: firstTime }), /follow-up time/);
+  assert.throws(() => answerOutcomeCheckIn([immediate], "outcome-1", { status: "answered" }, laterTime), /overall/);
 });
 
 test("keeps unreadable storage recoverable", async () => {

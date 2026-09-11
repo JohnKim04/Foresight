@@ -14,9 +14,9 @@ import { createJournalController } from "./src/journal-controller";
 import { JournalRoute, journalRoute, leaveFocusedRoute, openDetail, openEditComposer, openNewComposer, resolveRoute, routeAfterSave, topLevelRoute } from "./src/journal-navigation";
 import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION } from "./src/journal-storage";
 
-const blankSnapshot: JournalSnapshot = { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), recoveryNeeded: false, ignoredEntries: 0 };
+const blankSnapshot: JournalSnapshot = { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: false, ignoredEntries: 0 };
 
-function makeId(prefix: "entry" | "category"): string {
+function makeId(prefix: "entry" | "category" | "outcome"): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 

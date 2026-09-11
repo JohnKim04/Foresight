@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export const STORAGE_KEY = "foresight.journal.v1";
 export const BACKUP_KEY_PREFIX = "foresight.journal.unreadable.";
-export const JOURNAL_VERSION = 2;
+export const JOURNAL_VERSION = 3;
 
 const DEFAULT_CATEGORY_NAMES = ["Workout", "Alcohol", "Social", "Scrolling", "Sleep", "Work"];
 
@@ -21,10 +21,29 @@ export type JournalEntry = {
   categoryIds: string[];
 };
 
+export type OutcomePhase = "immediate" | "delayed";
+export type OutcomeValue = -2 | -1 | 0 | 1 | 2;
+export type OutcomeStatus = "pending" | "answered" | "not_sure" | "skipped";
+
+export type OutcomeCheckIn = {
+  id: string;
+  entryId: string;
+  phase: OutcomePhase;
+  status: OutcomeStatus;
+  dueAt: string | null;
+  answeredAt: string | null;
+  overall: OutcomeValue | null;
+  note: string;
+  excludedFromAnalysis: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type JournalStore = {
   version: typeof JOURNAL_VERSION;
   entries: JournalEntry[];
   categories: JournalCategory[];
+  outcomeCheckIns: OutcomeCheckIn[];
 };
 
 export type JournalSnapshot = JournalStore & {
@@ -36,6 +55,13 @@ export type KeyValueStore = {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   removeItem(key: string): Promise<void>;
+};
+
+type UnknownJournalEnvelope = {
+  version?: unknown;
+  entries?: unknown;
+  categories?: unknown;
+  outcomeCheckIns?: unknown;
 };
 
 function isTimestamp(value: unknown): value is string {
@@ -62,6 +88,24 @@ function cleanCategoryIds(value: unknown): string[] {
   return [...new Set(value.filter((id): id is string => typeof id === "string" && id.length > 0))];
 }
 
+function isOutcomeValue(value: unknown): value is OutcomeValue {
+  return value === -2 || value === -1 || value === 0 || value === 1 || value === 2;
+}
+
+function isOutcomePhase(value: unknown): value is OutcomePhase {
+  return value === "immediate" || value === "delayed";
+}
+
+function isOutcomeStatus(value: unknown): value is OutcomeStatus {
+  return value === "pending" || value === "answered" || value === "not_sure" || value === "skipped";
+}
+
+function cleanOutcomeNote(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const note = value.trim();
+  return note.length <= 5000 ? note : null;
+}
+
 function cleanEntry(entry: unknown): JournalEntry | null {
   if (!entry || typeof entry !== "object") return null;
 
@@ -85,6 +129,52 @@ function cleanEntry(entry: unknown): JournalEntry | null {
     createdAt: new Date(candidate.createdAt).toISOString(),
     updatedAt: new Date(candidate.updatedAt).toISOString(),
     categoryIds: cleanCategoryIds(candidate.categoryIds),
+  };
+}
+
+function cleanOutcomeCheckIn(checkIn: unknown): OutcomeCheckIn | null {
+  if (!checkIn || typeof checkIn !== "object") return null;
+
+  const candidate = checkIn as Partial<OutcomeCheckIn>;
+  const note = cleanOutcomeNote(candidate.note);
+  if (
+    typeof candidate.id !== "string" || !candidate.id ||
+    typeof candidate.entryId !== "string" || !candidate.entryId ||
+    !isOutcomePhase(candidate.phase) ||
+    !isOutcomeStatus(candidate.status) ||
+    note === null ||
+    typeof candidate.excludedFromAnalysis !== "boolean" ||
+    !isTimestamp(candidate.createdAt) ||
+    !isTimestamp(candidate.updatedAt)
+  ) {
+    return null;
+  }
+
+  const dueAt = candidate.dueAt === null ? null : isTimestamp(candidate.dueAt) ? new Date(candidate.dueAt).toISOString() : null;
+  const answeredAt = candidate.answeredAt === null ? null : isTimestamp(candidate.answeredAt) ? new Date(candidate.answeredAt).toISOString() : null;
+  if ((candidate.dueAt !== null && dueAt === null) || (candidate.answeredAt !== null && answeredAt === null)) return null;
+  if (candidate.phase === "immediate" && dueAt !== null) return null;
+
+  if (candidate.status === "pending" || candidate.status === "skipped") {
+    if (candidate.overall !== null || answeredAt !== null) return null;
+  } else if (candidate.status === "answered") {
+    if (!isOutcomeValue(candidate.overall) || answeredAt === null) return null;
+  } else if (candidate.status === "not_sure") {
+    if (candidate.overall !== null || answeredAt === null) return null;
+  }
+
+  return {
+    id: candidate.id,
+    entryId: candidate.entryId,
+    phase: candidate.phase,
+    status: candidate.status,
+    dueAt,
+    answeredAt,
+    overall: candidate.status === "answered" ? candidate.overall as OutcomeValue : null,
+    note,
+    excludedFromAnalysis: candidate.excludedFromAnalysis,
+    createdAt: new Date(candidate.createdAt).toISOString(),
+    updatedAt: new Date(candidate.updatedAt).toISOString(),
   };
 }
 
@@ -119,6 +209,79 @@ export function createEntry(
     updatedAt: timestamp,
     categoryIds: cleanCategoryIds(input.categoryIds),
   };
+}
+
+export function createOutcomeCheckIn(
+  input: Pick<OutcomeCheckIn, "entryId" | "phase"> & { dueAt?: string | null },
+  context: Pick<OutcomeCheckIn, "id" | "createdAt">,
+): OutcomeCheckIn {
+  if (!input.entryId) throw new Error("An outcome check-in needs a log.");
+  if (!isOutcomePhase(input.phase)) throw new Error("Choose a valid check-in timing.");
+  if (!context.id) throw new Error("An outcome check-in needs an ID.");
+  if (!isTimestamp(context.createdAt)) throw new Error("An outcome check-in needs a valid creation time.");
+  if (input.phase === "immediate" && input.dueAt != null) throw new Error("An immediate check-in cannot be scheduled for later.");
+  if (input.phase === "delayed" && !isTimestamp(input.dueAt)) throw new Error("Choose a valid follow-up time.");
+
+  const timestamp = new Date(context.createdAt).toISOString();
+  return {
+    id: context.id,
+    entryId: input.entryId,
+    phase: input.phase,
+    status: "pending",
+    dueAt: input.phase === "delayed" ? new Date(input.dueAt!).toISOString() : null,
+    answeredAt: null,
+    overall: null,
+    note: "",
+    excludedFromAnalysis: false,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
+export function answerOutcomeCheckIn(
+  checkIns: OutcomeCheckIn[],
+  id: string,
+  input: { overall?: OutcomeValue; status: "answered" | "not_sure"; note?: string; excludedFromAnalysis?: boolean },
+  answeredAt: string,
+): OutcomeCheckIn[] {
+  if (!isTimestamp(answeredAt)) throw new Error("Choose a valid response time.");
+  const original = checkIns.find((checkIn) => checkIn.id === id);
+  if (!original) throw new Error("That outcome check-in no longer exists.");
+  if (input.status === "answered" && !isOutcomeValue(input.overall)) throw new Error("Choose how you felt overall.");
+  if (input.status === "not_sure" && input.overall !== undefined) throw new Error("A not-sure response cannot include an overall rating.");
+  const note = input.note === undefined ? original.note : cleanOutcomeNote(input.note);
+  if (note === null) throw new Error("Keep the reflection note under 5,000 characters.");
+
+  const timestamp = new Date(answeredAt).toISOString();
+  const next: OutcomeCheckIn = {
+    ...original,
+    status: input.status,
+    overall: input.status === "answered" ? input.overall! : null,
+    answeredAt: timestamp,
+    note,
+    excludedFromAnalysis: input.excludedFromAnalysis ?? original.excludedFromAnalysis,
+    updatedAt: timestamp,
+  };
+  return checkIns.map((checkIn) => checkIn.id === id ? next : checkIn);
+}
+
+export function skipOutcomeCheckIn(checkIns: OutcomeCheckIn[], id: string, skippedAt: string): OutcomeCheckIn[] {
+  if (!isTimestamp(skippedAt)) throw new Error("Choose a valid skip time.");
+  const original = checkIns.find((checkIn) => checkIn.id === id);
+  if (!original) throw new Error("That outcome check-in no longer exists.");
+  const timestamp = new Date(skippedAt).toISOString();
+  return checkIns.map((checkIn) => checkIn.id === id ? {
+    ...original,
+    status: "skipped",
+    overall: null,
+    answeredAt: null,
+    updatedAt: timestamp,
+  } : checkIn);
+}
+
+export function removeOutcomeCheckIn(checkIns: OutcomeCheckIn[], id: string): OutcomeCheckIn[] {
+  if (!checkIns.some((checkIn) => checkIn.id === id)) throw new Error("That outcome check-in no longer exists.");
+  return checkIns.filter((checkIn) => checkIn.id !== id);
 }
 
 export function updateEntry(
@@ -162,46 +325,52 @@ function snapshot(store: JournalStore, ignoredEntries: number): JournalSnapshot 
   return { ...store, entries: sortEntries(store.entries), recoveryNeeded: false, ignoredEntries };
 }
 
+function cleanStore(entriesValue: unknown[], categoriesValue: unknown[], outcomeCheckInsValue: unknown[]): JournalSnapshot {
+  const parsedCategories = categoriesValue.map(cleanCategory).filter((item): item is JournalCategory => item !== null);
+  const categories = parsedCategories.filter((category, index) => parsedCategories.findIndex((item) => item.id === category.id) === index);
+  const allowedIds = new Set(categories.map((category) => category.id));
+  const cleanEntries = entriesValue.map(cleanEntry).filter((entry): entry is JournalEntry => entry !== null);
+  const entries = cleanEntries.map((entry) => ({ ...entry, categoryIds: entry.categoryIds.filter((id) => allowedIds.has(id)) }));
+  const entryIds = new Set(entries.map((entry) => entry.id));
+  const parsedCheckIns = outcomeCheckInsValue.map(cleanOutcomeCheckIn).filter((item): item is OutcomeCheckIn => item !== null);
+  const outcomeCheckIns = parsedCheckIns
+    .filter((checkIn, index) => parsedCheckIns.findIndex((item) => item.id === checkIn.id) === index)
+    .filter((checkIn) => entryIds.has(checkIn.entryId));
+  const ignoredEntries =
+    entriesValue.length - cleanEntries.length +
+    categoriesValue.length - categories.length +
+    outcomeCheckInsValue.length - outcomeCheckIns.length;
+  return snapshot({ version: JOURNAL_VERSION, entries, categories, outcomeCheckIns }, ignoredEntries);
+}
+
 export async function loadEntries(storage: KeyValueStore = AsyncStorage): Promise<JournalSnapshot> {
   const raw = await storage.getItem(STORAGE_KEY);
-  if (raw === null) return snapshot({ version: JOURNAL_VERSION, entries: [], categories: defaultCategories() }, 0);
+  if (raw === null) return snapshot({ version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [] }, 0);
 
   try {
     const parsed: unknown = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       const entries = parsed.map(cleanEntry).filter((entry): entry is JournalEntry => entry !== null);
-      return snapshot({ version: JOURNAL_VERSION, entries, categories: defaultCategories() }, parsed.length - entries.length);
+      return snapshot({ version: JOURNAL_VERSION, entries, categories: defaultCategories(), outcomeCheckIns: [] }, parsed.length - entries.length);
     }
-    if (!parsed || typeof parsed !== "object") return { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), recoveryNeeded: true, ignoredEntries: 0 };
+    if (!parsed || typeof parsed !== "object") return { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: true, ignoredEntries: 0 };
 
-    const candidate = parsed as Partial<JournalStore>;
-    if (candidate.version !== JOURNAL_VERSION || !Array.isArray(candidate.entries) || !Array.isArray(candidate.categories)) {
-      return { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), recoveryNeeded: true, ignoredEntries: 0 };
+    const candidate = parsed as UnknownJournalEnvelope;
+    if (candidate.version === 2 && Array.isArray(candidate.entries) && Array.isArray(candidate.categories)) {
+      return cleanStore(candidate.entries, candidate.categories, []);
     }
-
-    const parsedCategories = candidate.categories.map(cleanCategory).filter((item): item is JournalCategory => item !== null);
-    const categories = parsedCategories.filter((category, index) => parsedCategories.findIndex((item) => item.id === category.id) === index);
-    const allowedIds = new Set(categories.map((category) => category.id));
-    const cleanEntries = candidate.entries.map(cleanEntry).filter((entry): entry is JournalEntry => entry !== null);
-    const entries = cleanEntries.map((entry) => ({ ...entry, categoryIds: entry.categoryIds.filter((id) => allowedIds.has(id)) }));
-    return snapshot(
-      { version: JOURNAL_VERSION, entries, categories },
-      candidate.entries.length - cleanEntries.length + candidate.categories.length - categories.length,
-    );
+    if (candidate.version === JOURNAL_VERSION && Array.isArray(candidate.entries) && Array.isArray(candidate.categories) && Array.isArray(candidate.outcomeCheckIns)) {
+      return cleanStore(candidate.entries, candidate.categories, candidate.outcomeCheckIns);
+    }
+    return { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: true, ignoredEntries: 0 };
   } catch {
-    return { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), recoveryNeeded: true, ignoredEntries: 0 };
+    return { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: true, ignoredEntries: 0 };
   }
 }
 
 export async function saveJournal(store: JournalStore, storage: KeyValueStore = AsyncStorage): Promise<void> {
-  const parsedCategories = store.categories.map(cleanCategory).filter((item): item is JournalCategory => item !== null);
-  const categories = parsedCategories.filter((category, index) => parsedCategories.findIndex((item) => item.id === category.id) === index);
-  const allowedIds = new Set(categories.map((category) => category.id));
-  const entries = store.entries
-    .map(cleanEntry)
-    .filter((entry): entry is JournalEntry => entry !== null)
-    .map((entry) => ({ ...entry, categoryIds: entry.categoryIds.filter((id) => allowedIds.has(id)) }));
-  await storage.setItem(STORAGE_KEY, JSON.stringify({ version: JOURNAL_VERSION, entries: sortEntries(entries), categories }));
+  const cleaned = cleanStore(store.entries, store.categories, store.outcomeCheckIns);
+  await storage.setItem(STORAGE_KEY, JSON.stringify({ version: JOURNAL_VERSION, entries: cleaned.entries, categories: cleaned.categories, outcomeCheckIns: cleaned.outcomeCheckIns }));
 }
 
 export async function recoverUnreadableStorage(recoveryAt: string, storage: KeyValueStore = AsyncStorage): Promise<string | null> {
