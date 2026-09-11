@@ -3,15 +3,19 @@ import { formatLogDateTime } from "../journal-format";
 import { formatOutcomeSummary } from "../outcome-format";
 import { JournalEntry, JournalSnapshot, OutcomeCheckIn } from "../journal-storage";
 
-export function LogDetailScreen({ entry, journal, immediateCheckIn, status, onBack, onEdit, onCheckIn, onRemoveCheckIn }: {
+export function LogDetailScreen({ entry, journal, immediateCheckIn, delayedCheckIn, status, onBack, onEdit, onCheckIn, onScheduleCheckIn, onRescheduleCheckIn, onRemoveCheckIn, onRemoveDelayedCheckIn }: {
   entry: JournalEntry;
   journal: JournalSnapshot;
   immediateCheckIn: OutcomeCheckIn | null;
+  delayedCheckIn: OutcomeCheckIn | null;
   status: string;
   onBack: () => void;
   onEdit: () => void;
   onCheckIn: () => void;
+  onScheduleCheckIn: () => void;
+  onRescheduleCheckIn: () => void;
   onRemoveCheckIn: () => void;
+  onRemoveDelayedCheckIn: () => void;
 }) {
   const categories = new Map(journal.categories.map((category) => [category.id, category]));
   return <ScrollView contentContainerStyle={styles.content}>
@@ -39,10 +43,22 @@ export function LogDetailScreen({ entry, journal, immediateCheckIn, status, onBa
         <Pressable accessibilityLabel="Check in on overall feeling" onPress={onCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Check in now</Text></Pressable>
       </>}
     </View>
+    <View style={styles.followUpCard}>
+      <Text style={styles.eyebrow}>Later reflection</Text>
+      {delayedCheckIn ? <>
+        <Text style={styles.outcomeTitle}>Scheduled</Text>
+        <Text style={styles.outcomeText}>Due {formatLogDateTime(delayedCheckIn.dueAt!)}</Text>
+        <View style={styles.outcomeActions}><Pressable accessibilityLabel="Reschedule later reflection" onPress={onRescheduleCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Reschedule</Text></Pressable><Pressable accessibilityLabel="Cancel later reflection" onPress={onRemoveDelayedCheckIn} style={styles.removeButton}><Text style={styles.removeButtonText}>Cancel</Text></Pressable></View>
+      </> : <>
+        <Text style={styles.outcomeTitle}>Reflect later</Text>
+        <Text style={styles.outcomeText}>Schedule a private follow-up for when the effect is clearer.</Text>
+        <Pressable accessibilityLabel="Schedule a later reflection" onPress={onScheduleCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Check in later</Text></Pressable>
+      </>}
+    </View>
   </ScrollView>;
 }
 
 const colors = { surface: "#FFFEFA", ink: "#20231F", muted: "#667067", line: "#D9DDD5", sageDark: "#34503F" };
 const styles = StyleSheet.create({
-  content: { gap: 18, padding: 20, paddingBottom: 56 }, header: { gap: 14 }, backButton: { alignSelf: "flex-start", paddingVertical: 6 }, backText: { color: colors.sageDark, fontSize: 15, fontWeight: "800" }, eyebrow: { color: colors.sageDark, fontSize: 11, fontWeight: "800", letterSpacing: 1.35, textTransform: "uppercase" }, status: { color: colors.sageDark, fontSize: 13, lineHeight: 18 }, card: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 18, borderWidth: 1, gap: 16, padding: 20 }, date: { color: colors.sageDark, fontFamily: "Georgia", fontSize: 23, lineHeight: 30 }, body: { color: colors.ink, fontFamily: "Georgia", fontSize: 21, lineHeight: 32 }, chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, chip: { backgroundColor: "#E8EEE7", borderRadius: 100, paddingHorizontal: 12, paddingVertical: 8 }, chipText: { color: colors.sageDark, fontSize: 13, fontWeight: "800" }, meta: { borderTopColor: colors.line, borderTopWidth: 1, color: colors.muted, fontSize: 12, lineHeight: 18, paddingTop: 14 }, editButton: { alignItems: "center", backgroundColor: colors.sageDark, borderRadius: 100, minHeight: 46, justifyContent: "center", paddingHorizontal: 18 }, editButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" }, outcomeCard: { backgroundColor: "#EDEFE9", borderRadius: 18, gap: 10, padding: 20 }, outcomeTitle: { color: colors.ink, fontFamily: "Georgia", fontSize: 24, lineHeight: 30 }, outcomeText: { color: colors.muted, fontSize: 14, lineHeight: 20 }, outcomeNote: { color: colors.ink, fontSize: 15, fontStyle: "italic", lineHeight: 22 }, outcomeActions: { flexDirection: "row", gap: 12 }, secondaryButton: { alignItems: "center", backgroundColor: colors.surface, borderColor: "#BFC8BF", borderRadius: 100, borderWidth: 1, flex: 1, justifyContent: "center", minHeight: 43, paddingHorizontal: 14 }, secondaryButtonText: { color: colors.sageDark, fontSize: 14, fontWeight: "800" }, removeButton: { alignItems: "center", justifyContent: "center", paddingHorizontal: 8 }, removeButtonText: { color: "#714F20", fontSize: 14, fontWeight: "800" },
+  content: { gap: 18, padding: 20, paddingBottom: 56 }, header: { gap: 14 }, backButton: { alignSelf: "flex-start", paddingVertical: 6 }, backText: { color: colors.sageDark, fontSize: 15, fontWeight: "800" }, eyebrow: { color: colors.sageDark, fontSize: 11, fontWeight: "800", letterSpacing: 1.35, textTransform: "uppercase" }, status: { color: colors.sageDark, fontSize: 13, lineHeight: 18 }, card: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 18, borderWidth: 1, gap: 16, padding: 20 }, date: { color: colors.sageDark, fontFamily: "Georgia", fontSize: 23, lineHeight: 30 }, body: { color: colors.ink, fontFamily: "Georgia", fontSize: 21, lineHeight: 32 }, chips: { flexDirection: "row", flexWrap: "wrap", gap: 8 }, chip: { backgroundColor: "#E8EEE7", borderRadius: 100, paddingHorizontal: 12, paddingVertical: 8 }, chipText: { color: colors.sageDark, fontSize: 13, fontWeight: "800" }, meta: { borderTopColor: colors.line, borderTopWidth: 1, color: colors.muted, fontSize: 12, lineHeight: 18, paddingTop: 14 }, editButton: { alignItems: "center", backgroundColor: colors.sageDark, borderRadius: 100, minHeight: 46, justifyContent: "center", paddingHorizontal: 18 }, editButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" }, outcomeCard: { backgroundColor: "#EDEFE9", borderRadius: 18, gap: 10, padding: 20 }, followUpCard: { backgroundColor: "#F2F0E9", borderRadius: 18, gap: 10, padding: 20 }, outcomeTitle: { color: colors.ink, fontFamily: "Georgia", fontSize: 24, lineHeight: 30 }, outcomeText: { color: colors.muted, fontSize: 14, lineHeight: 20 }, outcomeNote: { color: colors.ink, fontSize: 15, fontStyle: "italic", lineHeight: 22 }, outcomeActions: { flexDirection: "row", gap: 12 }, secondaryButton: { alignItems: "center", backgroundColor: colors.surface, borderColor: "#BFC8BF", borderRadius: 100, borderWidth: 1, flex: 1, justifyContent: "center", minHeight: 43, paddingHorizontal: 14 }, secondaryButtonText: { color: colors.sageDark, fontSize: 14, fontWeight: "800" }, removeButton: { alignItems: "center", justifyContent: "center", paddingHorizontal: 8 }, removeButtonText: { color: "#714F20", fontSize: 14, fontWeight: "800" },
 });

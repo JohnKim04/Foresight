@@ -279,6 +279,20 @@ export function skipOutcomeCheckIn(checkIns: OutcomeCheckIn[], id: string, skipp
   } : checkIn);
 }
 
+export function rescheduleOutcomeCheckIn(checkIns: OutcomeCheckIn[], id: string, dueAt: string, updatedAt: string): OutcomeCheckIn[] {
+  if (!isTimestamp(dueAt) || !isTimestamp(updatedAt)) throw new Error("Choose a valid follow-up time.");
+  if (Date.parse(dueAt) <= Date.parse(updatedAt)) throw new Error("Choose a follow-up time in the future.");
+  const original = checkIns.find((checkIn) => checkIn.id === id);
+  if (!original) throw new Error("That outcome check-in no longer exists.");
+  if (original.phase !== "delayed" || original.status !== "pending") throw new Error("Only a pending delayed check-in can be rescheduled.");
+  const timestamp = new Date(updatedAt).toISOString();
+  return checkIns.map((checkIn) => checkIn.id === id ? {
+    ...original,
+    dueAt: new Date(dueAt).toISOString(),
+    updatedAt: timestamp,
+  } : checkIn);
+}
+
 export function removeOutcomeCheckIn(checkIns: OutcomeCheckIn[], id: string): OutcomeCheckIn[] {
   if (!checkIns.some((checkIn) => checkIn.id === id)) throw new Error("That outcome check-in no longer exists.");
   return checkIns.filter((checkIn) => checkIn.id !== id);

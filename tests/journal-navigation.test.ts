@@ -7,6 +7,7 @@ import {
   openEditComposer,
   openNewComposer,
   openOutcomeCheckIn,
+  openScheduleCheckIn,
   resolveRoute,
   routeAfterSave,
 } from "../src/journal-navigation";
@@ -38,10 +39,19 @@ test("falls back to Journal when a focused entry is unavailable", () => {
 
 test("returns an outcome check-in to its log and rejects unavailable check-ins", () => {
   const checkIn = openOutcomeCheckIn("entry-1", "outcome-1");
-  assert.deepEqual(checkIn, { screen: "outcome-check-in", entryId: "entry-1", checkInId: "outcome-1" });
+  assert.deepEqual(checkIn, { screen: "outcome-check-in", entryId: "entry-1", checkInId: "outcome-1", origin: "detail" });
   assert.deepEqual(leaveFocusedRoute(checkIn), openDetail("entry-1"));
   assert.equal(resolveRoute(checkIn, new Set(["entry-1"]), new Set()), journalRoute);
   assert.equal(resolveRoute(checkIn, new Set(["entry-1"]), new Set(["outcome-1"])), checkIn);
   const newCheckIn = openOutcomeCheckIn("entry-1", null);
   assert.equal(resolveRoute(newCheckIn, new Set(["entry-1"])), newCheckIn);
+});
+
+test("returns scheduled check-ins to their origin", () => {
+  const detailSchedule = openScheduleCheckIn("entry-1", null);
+  assert.deepEqual(leaveFocusedRoute(detailSchedule), openDetail("entry-1"));
+  const queueSchedule = openScheduleCheckIn("entry-1", "outcome-1", "check-ins");
+  assert.deepEqual(leaveFocusedRoute(queueSchedule), { screen: "check-ins" });
+  assert.equal(resolveRoute(queueSchedule, new Set(["entry-1"]), new Set()), journalRoute);
+  assert.equal(resolveRoute(queueSchedule, new Set(["entry-1"]), new Set(["outcome-1"])), queueSchedule);
 });

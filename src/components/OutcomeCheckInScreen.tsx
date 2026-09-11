@@ -21,12 +21,13 @@ export function OutcomeCheckInScreen({ body, eventAt, checkIn, note, status, onN
   onBack: () => void;
 }) {
   const actionVerb = checkIn ? "Update" : "Save";
+  const isDelayed = checkIn?.phase === "delayed";
   return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <View style={styles.header}>
       <Pressable accessibilityLabel="Back to log" onPress={onBack} style={styles.backButton}><Text style={styles.backText}>‹ Log</Text></Pressable>
       <Text style={styles.eyebrow}>{checkIn ? "Update reflection" : "Check in"}</Text>
-      <Text style={styles.title}>How do you feel now?</Text>
-      <Text style={styles.intro}>Compared with before this log, how do you feel overall?</Text>
+      <Text style={styles.title}>{isDelayed ? "How has this affected you?" : "How do you feel now?"}</Text>
+      <Text style={styles.intro}>{isDelayed ? "Thinking about this log since it happened, how do you feel overall?" : "Compared with before this log, how do you feel overall?"}</Text>
     </View>
     <View style={styles.logCard}>
       <Text style={styles.logDate}>{formatLogDateTime(eventAt)}</Text>
