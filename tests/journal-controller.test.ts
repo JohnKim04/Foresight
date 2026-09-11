@@ -121,3 +121,16 @@ test("controller persists immediate and delayed outcome check-in lifecycles", as
   assert.equal(journal.outcomeCheckIns.length, 2);
   await assert.rejects(() => controller.createOutcomeCheckIn(journal, { entryId: "missing", phase: "immediate" }), /log no longer exists/);
 });
+
+test("controller reschedules only pending delayed check-ins and persists the new due time", async () => {
+  const storage = memoryStorage();
+  const { controller, advanceTo } = fixedController(storage);
+  let journal = await controller.load();
+  journal = await controller.saveLog(journal, { body: "Late night out", eventAt: "2026-09-10T10:00:00.000Z", categoryIds: [] });
+  const delayed = await controller.createOutcomeCheckIn(journal, { entryId: journal.entries[0].id, phase: "delayed", dueAt: "2026-09-11T08:00:00.000Z" });
+  advanceTo("2026-09-10T11:00:00.000Z");
+  journal = await controller.rescheduleOutcomeCheckIn(delayed.journal, delayed.checkIn.id, "2026-09-12T09:00:00.000Z");
+  assert.equal(journal.outcomeCheckIns[0].dueAt, "2026-09-12T09:00:00.000Z");
+  assert.equal((await controller.load()).outcomeCheckIns[0].dueAt, "2026-09-12T09:00:00.000Z");
+  await assert.rejects(() => controller.rescheduleOutcomeCheckIn(journal, delayed.checkIn.id, "2026-09-10T10:00:00.000Z"), /future/);
+});

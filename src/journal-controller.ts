@@ -15,6 +15,7 @@ import {
   OutcomeValue,
   recoverUnreadableStorage,
   removeOutcomeCheckIn,
+  rescheduleOutcomeCheckIn,
   saveJournal,
   skipOutcomeCheckIn,
   updateEntry,
@@ -45,6 +46,7 @@ export type JournalController = {
   createOutcomeCheckIn: (journal: JournalSnapshot, input: CreateOutcomeCheckInInput) => Promise<{ journal: JournalSnapshot; checkIn: OutcomeCheckIn }>;
   answerOutcomeCheckIn: (journal: JournalSnapshot, input: AnswerOutcomeCheckInInput) => Promise<JournalSnapshot>;
   skipOutcomeCheckIn: (journal: JournalSnapshot, id: string) => Promise<JournalSnapshot>;
+  rescheduleOutcomeCheckIn: (journal: JournalSnapshot, id: string, dueAt: string) => Promise<JournalSnapshot>;
   removeOutcomeCheckIn: (journal: JournalSnapshot, id: string) => Promise<JournalSnapshot>;
   recover: () => Promise<JournalSnapshot>;
 };
@@ -111,6 +113,11 @@ export function createJournalController(dependencies: JournalControllerDependenc
 
     async skipOutcomeCheckIn(journal, id) {
       const checkIns = skipOutcomeCheckIn(journal.outcomeCheckIns, id, dependencies.now().toISOString());
+      return persist(journal.entries, journal.categories, checkIns, dependencies);
+    },
+
+    async rescheduleOutcomeCheckIn(journal, id, dueAt) {
+      const checkIns = rescheduleOutcomeCheckIn(journal.outcomeCheckIns, id, dueAt, dependencies.now().toISOString());
       return persist(journal.entries, journal.categories, checkIns, dependencies);
     },
 
