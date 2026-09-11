@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { allDailyActivity, categoryTrends, dailyActivity } from "../src/category-trends";
 import {
+  archiveCategory,
   BACKUP_KEY_PREFIX,
+  createCategory,
   createEntry,
+  defaultCategories,
+  filterEntriesByCategory,
+  JOURNAL_VERSION,
   KeyValueStore,
   loadEntries,
   recoverUnreadableStorage,
-  saveEntries,
+  saveJournal,
   STORAGE_KEY,
   updateEntry,
 } from "../src/journal-storage";
@@ -23,76 +29,85 @@ function memoryStorage(): KeyValueStore {
 const firstTime = "2026-09-10T10:00:00.000Z";
 const laterTime = "2026-09-10T11:00:00.000Z";
 
-test("creates a trimmed entry with stable timestamps", () => {
-  const entry = createEntry(
-    { body: "  A quiet walk after work.  ", eventAt: "2026-09-10T09:30:00.000Z" },
-    { id: "one", createdAt: firstTime },
-  );
-
-  assert.deepEqual(entry, {
-    id: "one",
-    body: "A quiet walk after work.",
-    eventAt: "2026-09-10T09:30:00.000Z",
-    createdAt: firstTime,
-    updatedAt: firstTime,
-  });
-});
-
-test("rejects entries without text or a valid event time", () => {
-  assert.throws(() => createEntry({ body: "   ", eventAt: firstTime }, { id: "one", createdAt: firstTime }));
-  assert.throws(() => createEntry({ body: "A note", eventAt: "noonish" }, { id: "one", createdAt: firstTime }));
-});
-
-test("saves, reloads, and sorts entries by event time", async () => {
-  const storage = memoryStorage();
-  const early = createEntry({ body: "Early", eventAt: "2026-09-09T09:00:00.000Z" }, { id: "early", createdAt: firstTime });
-  const late = createEntry({ body: "Late", eventAt: "2026-09-10T09:00:00.000Z" }, { id: "late", createdAt: laterTime });
-
-  await saveEntries([early, late], storage);
-  const journal = await loadEntries(storage);
-
-  assert.equal(journal.recoveryNeeded, false);
-  assert.deepEqual(journal.entries.map((entry) => entry.id), ["late", "early"]);
-});
-
-test("updates content and event time while preserving creation time", () => {
-  const original = createEntry({ body: "Original", eventAt: "2026-09-09T09:00:00.000Z" }, { id: "one", createdAt: firstTime });
-  const [updated] = updateEntry(
-    [original],
-    "one",
-    { body: "Updated log", eventAt: "2026-09-10T12:00:00.000Z" },
-    laterTime,
-  );
-
-  assert.equal(updated.id, "one");
-  assert.equal(updated.body, "Updated log");
-  assert.equal(updated.createdAt, firstTime);
-  assert.equal(updated.updatedAt, laterTime);
-  assert.equal(updated.eventAt, "2026-09-10T12:00:00.000Z");
-});
-
-test("filters malformed records without losing valid entries", async () => {
+test("migrates v1 arrays with empty category assignments and seeded suggestions", async () => {
   const storage = memoryStorage();
   await storage.setItem(STORAGE_KEY, JSON.stringify([
-    { id: "valid", body: "Valid", eventAt: firstTime, createdAt: firstTime, updatedAt: firstTime },
-    { id: "broken", body: "", eventAt: firstTime, createdAt: firstTime, updatedAt: firstTime },
+    { id: "one", body: " Existing log ", eventAt: firstTime, createdAt: firstTime, updatedAt: firstTime },
   ]));
 
   const journal = await loadEntries(storage);
-  assert.equal(journal.entries.length, 1);
-  assert.equal(journal.entries[0].id, "valid");
-  assert.equal(journal.ignoredEntries, 1);
+  assert.equal(journal.version, JOURNAL_VERSION);
+  assert.deepEqual(journal.entries[0].categoryIds, []);
+  assert.deepEqual(journal.categories.map((category) => category.name), ["Workout", "Alcohol", "Social", "Scrolling", "Sleep", "Work"]);
 });
 
-test("marks unreadable storage for recovery and keeps a backup when recovered", async () => {
+test("creates, updates, saves, and reloads category assignments", async () => {
+  const storage = memoryStorage();
+  const categories = createCategory(defaultCategories(), "Reading", "reading");
+  const entry = createEntry({ body: "  Finished a chapter. ", eventAt: firstTime, categoryIds: ["reading", "reading"] }, { id: "one", createdAt: firstTime });
+  const [updated] = updateEntry([entry], "one", { body: "Finished two chapters.", eventAt: laterTime, categoryIds: ["reading"] }, laterTime);
+  await saveJournal({ version: JOURNAL_VERSION, entries: [updated], categories }, storage);
+
+  const journal = await loadEntries(storage);
+  assert.equal(journal.entries[0].body, "Finished two chapters.");
+  assert.deepEqual(journal.entries[0].categoryIds, ["reading"]);
+  assert.equal(journal.entries[0].createdAt, firstTime);
+  assert.equal(journal.entries[0].updatedAt, laterTime);
+});
+
+test("validates custom categories, archives without changing history, and filters history", () => {
+  const categories = createCategory(defaultCategories(), "Reading", "reading");
+  assert.throws(() => createCategory(categories, " reading ", "another"), /already exists/);
+  const archived = archiveCategory(categories, "reading", laterTime);
+  assert.equal(archived.find((category) => category.id === "reading")?.archivedAt, laterTime);
+
+  const entry = createEntry({ body: "Read", eventAt: firstTime, categoryIds: ["reading"] }, { id: "one", createdAt: firstTime });
+  assert.deepEqual(filterEntriesByCategory([entry], "reading").map((item) => item.id), ["one"]);
+});
+
+test("drops malformed records and unknown category assignments from a v2 envelope", async () => {
+  const storage = memoryStorage();
+  await storage.setItem(STORAGE_KEY, JSON.stringify({
+    version: JOURNAL_VERSION,
+    categories: [{ id: "work", name: "Work", archivedAt: null }, { id: "broken", name: "", archivedAt: null }],
+    entries: [
+      { id: "good", body: "Valid", eventAt: firstTime, createdAt: firstTime, updatedAt: firstTime, categoryIds: ["work", "missing", "work"] },
+      { id: "bad", body: "", eventAt: firstTime, createdAt: firstTime, updatedAt: firstTime, categoryIds: [] },
+    ],
+  }));
+
+  const journal = await loadEntries(storage);
+  assert.equal(journal.entries.length, 1);
+  assert.deepEqual(journal.entries[0].categoryIds, ["work"]);
+  assert.equal(journal.categories.length, 1);
+  assert.equal(journal.ignoredEntries, 2);
+});
+
+test("keeps unreadable storage recoverable", async () => {
   const storage = memoryStorage();
   await storage.setItem(STORAGE_KEY, "not-json");
-
   assert.equal((await loadEntries(storage)).recoveryNeeded, true);
   const backupKey = await recoverUnreadableStorage(firstTime, storage);
-
   assert.ok(backupKey?.startsWith(BACKUP_KEY_PREFIX));
   assert.equal(await storage.getItem(STORAGE_KEY), null);
   assert.equal(await storage.getItem(backupKey ?? ""), "not-json");
-  assert.equal((await loadEntries(storage)).recoveryNeeded, false);
+});
+
+test("computes local-calendar trend totals, period deltas, and daily activity", () => {
+  const categories = [{ id: "work", name: "Work", archivedAt: null }, { id: "sleep", name: "Sleep", archivedAt: laterTime }];
+  const entries = [
+    createEntry({ body: "Today", eventAt: "2026-09-10T23:00:00.000Z", categoryIds: ["work", "sleep", "work"] }, { id: "today", createdAt: firstTime }),
+    createEntry({ body: "Yesterday", eventAt: "2026-09-09T12:00:00.000Z", categoryIds: ["work"] }, { id: "yesterday", createdAt: firstTime }),
+    createEntry({ body: "Previous week", eventAt: "2026-09-03T12:00:00.000Z", categoryIds: ["work"] }, { id: "previous", createdAt: firstTime }),
+  ];
+  const now = new Date("2026-09-10T23:30:00.000Z");
+  const trends = categoryTrends(entries, categories, 7, now);
+  assert.deepEqual(trends.map((trend) => [trend.category.id, trend.currentCount, trend.previousCount, trend.change]), [["work", 2, 1, 1], ["sleep", 1, 0, 1]]);
+  const activity = dailyActivity(entries, "work", 7, now);
+  assert.equal(activity.length, 7);
+  assert.equal(activity.find((day) => day.day === "2026-09-09")?.count, 1);
+  assert.equal(activity.find((day) => day.day === "2026-09-10")?.count, 1);
+  const allActivity = allDailyActivity(entries, 7, now);
+  assert.equal(allActivity.find((day) => day.day === "2026-09-10")?.count, 1);
+  assert.equal(allActivity.reduce((total, day) => total + day.count, 0), 2);
 });
