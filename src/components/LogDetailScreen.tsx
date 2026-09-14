@@ -38,21 +38,21 @@ export function LogDetailScreen({ entry, journal, immediateCheckIn, delayedCheck
           <Pressable accessibilityLabel="Remove overall feeling" onPress={onRemoveCheckIn} style={styles.removeButton}><Text style={styles.removeButtonText}>Remove</Text></Pressable>
         </View>
       </> : <>
-        <Text style={styles.outcomeTitle}>No reflection yet</Text>
-        <Text style={styles.outcomeText}>Take a moment to notice how this left you feeling.</Text>
+        <Text style={styles.outcomeTitle}>No check-in</Text>
+        <Text style={styles.outcomeText}>Add an overall rating.</Text>
         <Pressable accessibilityLabel="Check in on overall feeling" onPress={onCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Check in now</Text></Pressable>
       </>}
     </View>
     <View style={styles.followUpCard}>
-      <Text style={styles.eyebrow}>Later reflection</Text>
+      <Text style={styles.eyebrow}>Later check-in</Text>
       {delayedCheckIn ? <>
         <Text style={styles.outcomeTitle}>Scheduled</Text>
         <Text style={styles.outcomeText}>Due {formatLogDateTime(delayedCheckIn.dueAt!)}</Text>
-        <View style={styles.outcomeActions}><Pressable accessibilityLabel="Reschedule later reflection" onPress={onRescheduleCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Reschedule</Text></Pressable><Pressable accessibilityLabel="Cancel later reflection" onPress={onRemoveDelayedCheckIn} style={styles.removeButton}><Text style={styles.removeButtonText}>Cancel</Text></Pressable></View>
+        <View style={styles.outcomeActions}><Pressable accessibilityLabel="Reschedule later check-in" onPress={onRescheduleCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Reschedule</Text></Pressable><Pressable accessibilityLabel="Cancel later check-in" onPress={onRemoveDelayedCheckIn} style={styles.removeButton}><Text style={styles.removeButtonText}>Cancel</Text></Pressable></View>
       </> : <>
-        <Text style={styles.outcomeTitle}>Reflect later</Text>
-        <Text style={styles.outcomeText}>Schedule a private follow-up for when the effect is clearer.</Text>
-        <Pressable accessibilityLabel="Schedule a later reflection" onPress={onScheduleCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Check in later</Text></Pressable>
+        <Text style={styles.outcomeTitle}>No scheduled check-in</Text>
+        <Text style={styles.outcomeText}>Choose a time to rate this log later.</Text>
+        <Pressable accessibilityLabel="Schedule a later check-in" onPress={onScheduleCheckIn} style={styles.secondaryButton}><Text style={styles.secondaryButtonText}>Check in later</Text></Pressable>
       </>}
     </View>
   </ScrollView>;

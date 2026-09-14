@@ -153,39 +153,39 @@ export default function App() {
       setJournal(next);
       setOutcomeNote("");
       setRoute(route.origin === "detail" ? openDetail(route.entryId) : topLevelRoute("check-ins"));
-      setStatus(response.status === "not_sure" ? "Reflection saved as not sure yet." : "Reflection saved.");
+      setStatus(response.status === "not_sure" ? "Marked as not sure." : "Check-in saved.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not save this reflection.");
+      setStatus(error instanceof Error ? error.message : "Could not save check-in.");
     }
   }
 
   async function handleScheduleCheckIn(date: Date) {
     if (route.screen !== "schedule-check-in") return;
     try {
-      if (date.getTime() <= Date.now()) throw new Error("Choose a follow-up time in the future.");
+      if (date.getTime() <= Date.now()) throw new Error("Choose a future check-in time.");
       const next = route.checkInId
         ? await controller.rescheduleOutcomeCheckIn(journal, route.checkInId, date.toISOString())
         : (await controller.createOutcomeCheckIn(journal, { entryId: route.entryId, phase: "delayed", dueAt: date.toISOString() })).journal;
       setJournal(next);
       setRoute(route.origin === "detail" ? openDetail(route.entryId) : topLevelRoute("check-ins"));
-      setStatus(route.checkInId ? "Follow-up rescheduled." : "Follow-up scheduled.");
+      setStatus(route.checkInId ? "Check-in rescheduled." : "Check-in scheduled.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not schedule this follow-up.");
+      setStatus(error instanceof Error ? error.message : "Could not schedule check-in.");
     }
   }
 
   async function handleSkipDelayedCheckIn(checkIn: OutcomeCheckIn) {
     try {
       setJournal(await controller.skipOutcomeCheckIn(journal, checkIn.id));
-      setStatus("Follow-up skipped. Your log was kept.");
+      setStatus("Check-in skipped.");
       setRoute(topLevelRoute("check-ins"));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not skip this follow-up.");
+      setStatus(error instanceof Error ? error.message : "Could not skip check-in.");
     }
   }
 
   function confirmOutcomeRemoval(entryId: string, checkInId: string) {
-    Alert.alert("Remove reflection?", "This removes the feeling check-in but keeps your journal log.", [
+    Alert.alert("Remove check-in?", "This removes the check-in. The log stays.", [
       { text: "Cancel", style: "cancel" },
       { text: "Remove", style: "destructive", onPress: () => void handleOutcomeRemoval(entryId, checkInId) },
     ]);
@@ -194,10 +194,10 @@ export default function App() {
   async function handleOutcomeRemoval(entryId: string, checkInId: string) {
     try {
       setJournal(await controller.removeOutcomeCheckIn(journal, checkInId));
-      setStatus("Reflection removed.");
+      setStatus("Check-in removed.");
       setRoute(openDetail(entryId));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not remove this reflection.");
+      setStatus(error instanceof Error ? error.message : "Could not remove check-in.");
     }
   }
 
@@ -296,7 +296,7 @@ export default function App() {
       setJournal(await controller.recover());
       resetComposer();
       setRoute(journalRoute);
-      setStatus("A fresh journal is ready. The unreadable data was backed up.");
+      setStatus("New journal created. Original data was backed up.");
     } catch {
       setStatus("Could not recover the journal. Please try again.");
     }
@@ -310,7 +310,7 @@ export default function App() {
   const scheduleEntry = route.screen === "schedule-check-in" ? journal.entries.find((entry) => entry.id === route.entryId) : null;
   const scheduleCheckIn = route.screen === "schedule-check-in" && route.checkInId ? journal.outcomeCheckIns.find((checkIn) => checkIn.id === route.checkInId) ?? null : null;
 
-  if (isLoading) return <SafeAreaProvider><SafeAreaView style={styles.loadingScreen}><StatusBar style="dark" /><ActivityIndicator color={colors.sageDark} /><Text style={styles.loadingText}>Opening your journal…</Text></SafeAreaView></SafeAreaProvider>;
+  if (isLoading) return <SafeAreaProvider><SafeAreaView style={styles.loadingScreen}><StatusBar style="dark" /><ActivityIndicator color={colors.sageDark} /><Text style={styles.loadingText}>Loading…</Text></SafeAreaView></SafeAreaProvider>;
 
   let content: ReactNode;
   if (route.screen === "detail" && detailEntry) {

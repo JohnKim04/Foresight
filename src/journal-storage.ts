@@ -220,7 +220,7 @@ export function createOutcomeCheckIn(
   if (!context.id) throw new Error("An outcome check-in needs an ID.");
   if (!isTimestamp(context.createdAt)) throw new Error("An outcome check-in needs a valid creation time.");
   if (input.phase === "immediate" && input.dueAt != null) throw new Error("An immediate check-in cannot be scheduled for later.");
-  if (input.phase === "delayed" && !isTimestamp(input.dueAt)) throw new Error("Choose a valid follow-up time.");
+  if (input.phase === "delayed" && !isTimestamp(input.dueAt)) throw new Error("Choose a valid check-in time.");
 
   const timestamp = new Date(context.createdAt).toISOString();
   return {
@@ -250,7 +250,7 @@ export function answerOutcomeCheckIn(
   if (input.status === "answered" && !isOutcomeValue(input.overall)) throw new Error("Choose how you felt overall.");
   if (input.status === "not_sure" && input.overall !== undefined) throw new Error("A not-sure response cannot include an overall rating.");
   const note = input.note === undefined ? original.note : cleanOutcomeNote(input.note);
-  if (note === null) throw new Error("Keep the reflection note under 5,000 characters.");
+  if (note === null) throw new Error("Keep the note under 5,000 characters.");
 
   const timestamp = new Date(answeredAt).toISOString();
   const next: OutcomeCheckIn = {
@@ -280,8 +280,8 @@ export function skipOutcomeCheckIn(checkIns: OutcomeCheckIn[], id: string, skipp
 }
 
 export function rescheduleOutcomeCheckIn(checkIns: OutcomeCheckIn[], id: string, dueAt: string, updatedAt: string): OutcomeCheckIn[] {
-  if (!isTimestamp(dueAt) || !isTimestamp(updatedAt)) throw new Error("Choose a valid follow-up time.");
-  if (Date.parse(dueAt) <= Date.parse(updatedAt)) throw new Error("Choose a follow-up time in the future.");
+  if (!isTimestamp(dueAt) || !isTimestamp(updatedAt)) throw new Error("Choose a valid check-in time.");
+  if (Date.parse(dueAt) <= Date.parse(updatedAt)) throw new Error("Choose a future check-in time.");
   const original = checkIns.find((checkIn) => checkIn.id === id);
   if (!original) throw new Error("That outcome check-in no longer exists.");
   if (original.phase !== "delayed" || original.status !== "pending") throw new Error("Only a pending delayed check-in can be rescheduled.");

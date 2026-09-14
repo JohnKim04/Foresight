@@ -30,7 +30,7 @@ export function LogComposerScreen({ journal, mode, body, eventDate, categoryIds,
   const actionLabel = mode === "edit" ? "Update log" : "Save log";
 
   return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-    <View style={styles.header}><Pressable accessibilityLabel="Cancel" onPress={onCancel} style={styles.cancelButton}><Text style={styles.cancelText}>Cancel</Text></Pressable><Text style={styles.eyebrow}>{mode === "edit" ? "Editing log" : "New log"}</Text><Text style={styles.title}>{mode === "edit" ? "Make a correction" : "Write a log"}</Text></View>
+    <View style={styles.header}><Pressable accessibilityLabel="Cancel" onPress={onCancel} style={styles.cancelButton}><Text style={styles.cancelText}>Cancel</Text></Pressable><Text style={styles.eyebrow}>{mode === "edit" ? "Editing log" : "New log"}</Text><Text style={styles.title}>{mode === "edit" ? "Edit log" : "Write a log"}</Text></View>
     <View style={styles.card}>
       <Text style={styles.label}>What happened?</Text>
       <TextInput accessibilityLabel="What happened?" multiline maxLength={5000} onChangeText={onBodyChange} placeholder="Write about anything." placeholderTextColor={colors.placeholder} style={styles.textArea} textAlignVertical="top" value={body} />
@@ -44,7 +44,7 @@ export function LogComposerScreen({ journal, mode, body, eventDate, categoryIds,
       <Pressable accessibilityLabel={actionLabel} accessibilityState={{ disabled: !body.trim() }} disabled={!body.trim()} onPress={onSave} style={[styles.primaryButton, !body.trim() && styles.primaryButtonDisabled]}><Text style={styles.primaryButtonText}>{actionLabel}</Text></Pressable>
       <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text>
     </View>
-    <View style={styles.manager}><Text style={styles.eyebrow}>Category management</Text><Text style={styles.managerText}>Archive a category when you no longer want it in new logs. Past logs and Trends stay intact.</Text>{activeCategories.map((category) => <View key={category.id} style={styles.managerRow}><Text style={styles.managerName}>{category.name}</Text><Pressable accessibilityLabel={`Archive ${category.name}`} onPress={() => onArchiveRequest(category)}><Text style={styles.archiveAction}>Archive</Text></Pressable></View>)}</View>
+    <View style={styles.manager}><Text style={styles.eyebrow}>Category management</Text><Text style={styles.managerText}>Archived categories remain on past logs and in Trends.</Text>{activeCategories.map((category) => <View key={category.id} style={styles.managerRow}><Text style={styles.managerName}>{category.name}</Text><Pressable accessibilityLabel={`Archive ${category.name}`} onPress={() => onArchiveRequest(category)}><Text style={styles.archiveAction}>Archive</Text></Pressable></View>)}</View>
   </ScrollView>;
 }
 

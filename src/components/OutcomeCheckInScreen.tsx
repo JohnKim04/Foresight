@@ -25,20 +25,20 @@ export function OutcomeCheckInScreen({ body, eventAt, checkIn, note, status, onN
   return <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <View style={styles.header}>
       <Pressable accessibilityLabel="Back to log" onPress={onBack} style={styles.backButton}><Text style={styles.backText}>‹ Log</Text></Pressable>
-      <Text style={styles.eyebrow}>{checkIn ? "Update reflection" : "Check in"}</Text>
-      <Text style={styles.title}>{isDelayed ? "How has this affected you?" : "How do you feel now?"}</Text>
-      <Text style={styles.intro}>{isDelayed ? "Thinking about this log since it happened, how do you feel overall?" : "Compared with before this log, how do you feel overall?"}</Text>
+      <Text style={styles.eyebrow}>{checkIn ? "Update check-in" : "Check in"}</Text>
+      <Text style={styles.title}>Overall feeling</Text>
+      <Text style={styles.intro}>{isDelayed ? "Since this log." : "Compared with before this log."}</Text>
     </View>
     <View style={styles.logCard}>
       <Text style={styles.logDate}>{formatLogDateTime(eventAt)}</Text>
       <Text numberOfLines={4} style={styles.logBody}>{body}</Text>
     </View>
     <View style={styles.card}>
-      <Text style={styles.label}>Choose one</Text>
+      <Text style={styles.label}>Rating</Text>
       <View style={styles.choices}>{choices.map((choice) => <Pressable key={choice.value} accessibilityLabel={`${actionVerb} ${choice.label.toLowerCase()}`} onPress={() => onRespond({ status: "answered", overall: choice.value })} style={styles.choice}><Text style={styles.choiceText}>{choice.label}</Text></Pressable>)}</View>
       <Pressable accessibilityLabel={`${actionVerb} not sure or too soon to tell`} onPress={() => onRespond({ status: "not_sure" })} style={styles.notSure}><Text style={styles.notSureText}>Not sure / too soon to tell</Text></Pressable>
-      <Text style={styles.label}>A note, if helpful</Text>
-      <TextInput accessibilityLabel="Reflection note" maxLength={5000} multiline onChangeText={onNoteChange} placeholder="What made it feel that way?" placeholderTextColor={colors.placeholder} style={styles.note} textAlignVertical="top" value={note} />
+      <Text style={styles.label}>Optional note</Text>
+      <TextInput accessibilityLabel="Optional note" maxLength={5000} multiline onChangeText={onNoteChange} placeholder="Add context" placeholderTextColor={colors.placeholder} style={styles.note} textAlignVertical="top" value={note} />
       {status ? <Text accessibilityLiveRegion="polite" style={styles.status}>{status}</Text> : null}
     </View>
   </ScrollView>;
