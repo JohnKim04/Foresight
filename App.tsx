@@ -9,18 +9,25 @@ import { JournalScreen } from "./src/components/JournalScreen";
 import { CheckInQueueScreen } from "./src/components/CheckInQueueScreen";
 import { LogComposerScreen, PickerMode } from "./src/components/LogComposerScreen";
 import { LogDetailScreen } from "./src/components/LogDetailScreen";
-import { OutcomeCheckInScreen } from "./src/components/OutcomeCheckInScreen";
+import { OutcomeCheckInScreen, OutcomeResponse } from "./src/components/OutcomeCheckInScreen";
 import { ScheduleCheckInScreen } from "./src/components/ScheduleCheckInScreen";
 import { ScreenTabs } from "./src/components/ScreenTabs";
 import { TrendsScreen, TrendsView } from "./src/components/TrendsScreen";
 import { createJournalController } from "./src/journal-controller";
 import { JournalRoute, journalRoute, leaveFocusedRoute, openDetail, openEditComposer, openNewComposer, openOutcomeCheckIn, openScheduleCheckIn, resolveRoute, routeAfterSave, topLevelRoute } from "./src/journal-navigation";
-import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION, OutcomeCheckIn, OutcomePhase, OutcomeValue } from "./src/journal-storage";
+import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION, OutcomeCheckIn, OutcomePhase } from "./src/journal-storage";
 
 const blankSnapshot: JournalSnapshot = { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: false, ignoredEntries: 0 };
 
 function makeId(prefix: "entry" | "category" | "outcome"): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function responseForCheckIn(checkIn: OutcomeCheckIn | null): OutcomeResponse | null {
+  if (checkIn?.status === "answered" && checkIn.overall !== null) {
+    return { status: "answered", overall: checkIn.overall };
+  }
+  return checkIn?.status === "not_sure" ? { status: "not_sure" } : null;
 }
 
 export default function App() {
@@ -34,6 +41,7 @@ export default function App() {
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [outcomeNote, setOutcomeNote] = useState("");
+  const [outcomeResponse, setOutcomeResponse] = useState<OutcomeResponse | null>(null);
   const [queueNow, setQueueNow] = useState(() => new Date());
   const [historyCategoryId, setHistoryCategoryId] = useState<string | null>(null);
   const [trendRange, setTrendRange] = useState<TrendRange>(7);
@@ -91,6 +99,7 @@ export default function App() {
   function closeOutcomeCheckIn() {
     setRoute(leaveFocusedRoute(route));
     setOutcomeNote("");
+    setOutcomeResponse(null);
     setStatus("");
   }
 
@@ -125,12 +134,14 @@ export default function App() {
   function openOutcomeCheckInForEntry(entry: JournalEntry) {
     const existing = [...journal.outcomeCheckIns].reverse().find((checkIn) => checkIn.entryId === entry.id && checkIn.phase === "immediate") ?? null;
     setOutcomeNote(existing?.note ?? "");
+    setOutcomeResponse(responseForCheckIn(existing));
     setStatus("");
     setRoute(openOutcomeCheckIn(entry.id, existing?.id ?? null));
   }
 
   function openOutcomeCheckInFromQueue(checkIn: OutcomeCheckIn) {
     setOutcomeNote(checkIn.note);
+    setOutcomeResponse(responseForCheckIn(checkIn));
     setStatus("");
     setRoute(openOutcomeCheckIn(checkIn.entryId, checkIn.id, "check-ins"));
   }
@@ -140,7 +151,7 @@ export default function App() {
     setRoute(openScheduleCheckIn(entry.id, checkIn?.id ?? null, origin));
   }
 
-  async function handleOutcomeResponse(response: { status: "answered"; overall: OutcomeValue } | { status: "not_sure" }) {
+  async function handleOutcomeResponse(response: OutcomeResponse) {
     if (route.screen !== "outcome-check-in") return;
     try {
       let next: JournalSnapshot;
@@ -152,6 +163,7 @@ export default function App() {
       }
       setJournal(next);
       setOutcomeNote("");
+      setOutcomeResponse(null);
       setRoute(route.origin === "detail" ? openDetail(route.entryId) : topLevelRoute("check-ins"));
       setStatus(response.status === "not_sure" ? "Marked as not sure." : "Check-in saved.");
     } catch (error) {
@@ -316,7 +328,7 @@ export default function App() {
   if (route.screen === "detail" && detailEntry) {
     content = <LogDetailScreen entry={detailEntry} journal={journal} immediateCheckIn={detailImmediateCheckIn} delayedCheckIn={detailDelayedCheckIn} status={status} onBack={closeDetail} onEdit={() => openComposerForEdit(detailEntry)} onCheckIn={() => openOutcomeCheckInForEntry(detailEntry)} onScheduleCheckIn={() => openScheduleCheckInForEntry(detailEntry)} onRescheduleCheckIn={() => detailDelayedCheckIn && openScheduleCheckInForEntry(detailEntry, detailDelayedCheckIn)} onRemoveCheckIn={() => detailImmediateCheckIn && confirmOutcomeRemoval(detailEntry.id, detailImmediateCheckIn.id)} onRemoveDelayedCheckIn={() => detailDelayedCheckIn && confirmOutcomeRemoval(detailEntry.id, detailDelayedCheckIn.id)} />;
   } else if (route.screen === "outcome-check-in" && outcomeEntry) {
-    content = <OutcomeCheckInScreen body={outcomeEntry.body} eventAt={outcomeEntry.eventAt} checkIn={outcomeCheckIn} note={outcomeNote} status={status} onNoteChange={setOutcomeNote} onRespond={(response) => void handleOutcomeResponse(response)} onBack={closeOutcomeCheckIn} />;
+    content = <OutcomeCheckInScreen body={outcomeEntry.body} eventAt={outcomeEntry.eventAt} checkIn={outcomeCheckIn} note={outcomeNote} response={outcomeResponse} status={status} onNoteChange={setOutcomeNote} onResponseChange={setOutcomeResponse} onSave={() => outcomeResponse && void handleOutcomeResponse(outcomeResponse)} onBack={closeOutcomeCheckIn} />;
   } else if (route.screen === "schedule-check-in" && scheduleEntry) {
     content = <ScheduleCheckInScreen body={scheduleEntry.body} eventAt={scheduleEntry.eventAt} initialDate={scheduleCheckIn?.dueAt ? new Date(scheduleCheckIn.dueAt) : new Date(Date.now() + 60 * 60 * 1000)} status={status} onSchedule={(date) => void handleScheduleCheckIn(date)} onBack={closeScheduleCheckIn} />;
   } else if (route.screen === "composer") {
