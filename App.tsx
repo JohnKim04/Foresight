@@ -9,18 +9,25 @@ import { JournalScreen } from "./src/components/JournalScreen";
 import { CheckInQueueScreen } from "./src/components/CheckInQueueScreen";
 import { LogComposerScreen, PickerMode } from "./src/components/LogComposerScreen";
 import { LogDetailScreen } from "./src/components/LogDetailScreen";
-import { OutcomeCheckInScreen } from "./src/components/OutcomeCheckInScreen";
+import { OutcomeCheckInScreen, OutcomeResponse } from "./src/components/OutcomeCheckInScreen";
 import { ScheduleCheckInScreen } from "./src/components/ScheduleCheckInScreen";
 import { ScreenTabs } from "./src/components/ScreenTabs";
-import { TrendsScreen } from "./src/components/TrendsScreen";
+import { TrendsScreen, TrendsView } from "./src/components/TrendsScreen";
 import { createJournalController } from "./src/journal-controller";
 import { JournalRoute, journalRoute, leaveFocusedRoute, openDetail, openEditComposer, openNewComposer, openOutcomeCheckIn, openScheduleCheckIn, resolveRoute, routeAfterSave, topLevelRoute } from "./src/journal-navigation";
-import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION, OutcomeCheckIn, OutcomeValue } from "./src/journal-storage";
+import { defaultCategories, JournalCategory, JournalEntry, JournalSnapshot, JOURNAL_VERSION, OutcomeCheckIn, OutcomePhase } from "./src/journal-storage";
 
 const blankSnapshot: JournalSnapshot = { version: JOURNAL_VERSION, entries: [], categories: defaultCategories(), outcomeCheckIns: [], recoveryNeeded: false, ignoredEntries: 0 };
 
 function makeId(prefix: "entry" | "category" | "outcome"): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function responseForCheckIn(checkIn: OutcomeCheckIn | null): OutcomeResponse | null {
+  if (checkIn?.status === "answered" && checkIn.overall !== null) {
+    return { status: "answered", overall: checkIn.overall };
+  }
+  return checkIn?.status === "not_sure" ? { status: "not_sure" } : null;
 }
 
 export default function App() {
@@ -34,10 +41,13 @@ export default function App() {
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [outcomeNote, setOutcomeNote] = useState("");
+  const [outcomeResponse, setOutcomeResponse] = useState<OutcomeResponse | null>(null);
   const [queueNow, setQueueNow] = useState(() => new Date());
   const [historyCategoryId, setHistoryCategoryId] = useState<string | null>(null);
   const [trendRange, setTrendRange] = useState<TrendRange>(7);
   const [trendCategoryId, setTrendCategoryId] = useState<string | null>(null);
+  const [trendsView, setTrendsView] = useState<TrendsView>("activity");
+  const [outcomePhase, setOutcomePhase] = useState<OutcomePhase>("delayed");
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
   const [status, setStatus] = useState("");
 
@@ -89,6 +99,7 @@ export default function App() {
   function closeOutcomeCheckIn() {
     setRoute(leaveFocusedRoute(route));
     setOutcomeNote("");
+    setOutcomeResponse(null);
     setStatus("");
   }
 
@@ -123,12 +134,14 @@ export default function App() {
   function openOutcomeCheckInForEntry(entry: JournalEntry) {
     const existing = [...journal.outcomeCheckIns].reverse().find((checkIn) => checkIn.entryId === entry.id && checkIn.phase === "immediate") ?? null;
     setOutcomeNote(existing?.note ?? "");
+    setOutcomeResponse(responseForCheckIn(existing));
     setStatus("");
     setRoute(openOutcomeCheckIn(entry.id, existing?.id ?? null));
   }
 
   function openOutcomeCheckInFromQueue(checkIn: OutcomeCheckIn) {
     setOutcomeNote(checkIn.note);
+    setOutcomeResponse(responseForCheckIn(checkIn));
     setStatus("");
     setRoute(openOutcomeCheckIn(checkIn.entryId, checkIn.id, "check-ins"));
   }
@@ -138,7 +151,7 @@ export default function App() {
     setRoute(openScheduleCheckIn(entry.id, checkIn?.id ?? null, origin));
   }
 
-  async function handleOutcomeResponse(response: { status: "answered"; overall: OutcomeValue } | { status: "not_sure" }) {
+  async function handleOutcomeResponse(response: OutcomeResponse) {
     if (route.screen !== "outcome-check-in") return;
     try {
       let next: JournalSnapshot;
@@ -150,40 +163,41 @@ export default function App() {
       }
       setJournal(next);
       setOutcomeNote("");
+      setOutcomeResponse(null);
       setRoute(route.origin === "detail" ? openDetail(route.entryId) : topLevelRoute("check-ins"));
-      setStatus(response.status === "not_sure" ? "Reflection saved as not sure yet." : "Reflection saved.");
+      setStatus(response.status === "not_sure" ? "Marked as not sure." : "Check-in saved.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not save this reflection.");
+      setStatus(error instanceof Error ? error.message : "Could not save check-in.");
     }
   }
 
   async function handleScheduleCheckIn(date: Date) {
     if (route.screen !== "schedule-check-in") return;
     try {
-      if (date.getTime() <= Date.now()) throw new Error("Choose a follow-up time in the future.");
+      if (date.getTime() <= Date.now()) throw new Error("Choose a future check-in time.");
       const next = route.checkInId
         ? await controller.rescheduleOutcomeCheckIn(journal, route.checkInId, date.toISOString())
         : (await controller.createOutcomeCheckIn(journal, { entryId: route.entryId, phase: "delayed", dueAt: date.toISOString() })).journal;
       setJournal(next);
       setRoute(route.origin === "detail" ? openDetail(route.entryId) : topLevelRoute("check-ins"));
-      setStatus(route.checkInId ? "Follow-up rescheduled." : "Follow-up scheduled.");
+      setStatus(route.checkInId ? "Check-in rescheduled." : "Check-in scheduled.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not schedule this follow-up.");
+      setStatus(error instanceof Error ? error.message : "Could not schedule check-in.");
     }
   }
 
   async function handleSkipDelayedCheckIn(checkIn: OutcomeCheckIn) {
     try {
       setJournal(await controller.skipOutcomeCheckIn(journal, checkIn.id));
-      setStatus("Follow-up skipped. Your log was kept.");
+      setStatus("Check-in skipped.");
       setRoute(topLevelRoute("check-ins"));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not skip this follow-up.");
+      setStatus(error instanceof Error ? error.message : "Could not skip check-in.");
     }
   }
 
   function confirmOutcomeRemoval(entryId: string, checkInId: string) {
-    Alert.alert("Remove reflection?", "This removes the feeling check-in but keeps your journal log.", [
+    Alert.alert("Remove check-in?", "This removes the check-in. The log stays.", [
       { text: "Cancel", style: "cancel" },
       { text: "Remove", style: "destructive", onPress: () => void handleOutcomeRemoval(entryId, checkInId) },
     ]);
@@ -192,10 +206,10 @@ export default function App() {
   async function handleOutcomeRemoval(entryId: string, checkInId: string) {
     try {
       setJournal(await controller.removeOutcomeCheckIn(journal, checkInId));
-      setStatus("Reflection removed.");
+      setStatus("Check-in removed.");
       setRoute(openDetail(entryId));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not remove this reflection.");
+      setStatus(error instanceof Error ? error.message : "Could not remove check-in.");
     }
   }
 
@@ -294,7 +308,7 @@ export default function App() {
       setJournal(await controller.recover());
       resetComposer();
       setRoute(journalRoute);
-      setStatus("A fresh journal is ready. The unreadable data was backed up.");
+      setStatus("New journal created. Original data was backed up.");
     } catch {
       setStatus("Could not recover the journal. Please try again.");
     }
@@ -308,13 +322,13 @@ export default function App() {
   const scheduleEntry = route.screen === "schedule-check-in" ? journal.entries.find((entry) => entry.id === route.entryId) : null;
   const scheduleCheckIn = route.screen === "schedule-check-in" && route.checkInId ? journal.outcomeCheckIns.find((checkIn) => checkIn.id === route.checkInId) ?? null : null;
 
-  if (isLoading) return <SafeAreaProvider><SafeAreaView style={styles.loadingScreen}><StatusBar style="dark" /><ActivityIndicator color={colors.sageDark} /><Text style={styles.loadingText}>Opening your journal…</Text></SafeAreaView></SafeAreaProvider>;
+  if (isLoading) return <SafeAreaProvider><SafeAreaView style={styles.loadingScreen}><StatusBar style="dark" /><ActivityIndicator color={colors.sageDark} /><Text style={styles.loadingText}>Loading…</Text></SafeAreaView></SafeAreaProvider>;
 
   let content: ReactNode;
   if (route.screen === "detail" && detailEntry) {
     content = <LogDetailScreen entry={detailEntry} journal={journal} immediateCheckIn={detailImmediateCheckIn} delayedCheckIn={detailDelayedCheckIn} status={status} onBack={closeDetail} onEdit={() => openComposerForEdit(detailEntry)} onCheckIn={() => openOutcomeCheckInForEntry(detailEntry)} onScheduleCheckIn={() => openScheduleCheckInForEntry(detailEntry)} onRescheduleCheckIn={() => detailDelayedCheckIn && openScheduleCheckInForEntry(detailEntry, detailDelayedCheckIn)} onRemoveCheckIn={() => detailImmediateCheckIn && confirmOutcomeRemoval(detailEntry.id, detailImmediateCheckIn.id)} onRemoveDelayedCheckIn={() => detailDelayedCheckIn && confirmOutcomeRemoval(detailEntry.id, detailDelayedCheckIn.id)} />;
   } else if (route.screen === "outcome-check-in" && outcomeEntry) {
-    content = <OutcomeCheckInScreen body={outcomeEntry.body} eventAt={outcomeEntry.eventAt} checkIn={outcomeCheckIn} note={outcomeNote} status={status} onNoteChange={setOutcomeNote} onRespond={(response) => void handleOutcomeResponse(response)} onBack={closeOutcomeCheckIn} />;
+    content = <OutcomeCheckInScreen body={outcomeEntry.body} eventAt={outcomeEntry.eventAt} checkIn={outcomeCheckIn} note={outcomeNote} response={outcomeResponse} status={status} onNoteChange={setOutcomeNote} onResponseChange={setOutcomeResponse} onSave={() => outcomeResponse && void handleOutcomeResponse(outcomeResponse)} onBack={closeOutcomeCheckIn} />;
   } else if (route.screen === "schedule-check-in" && scheduleEntry) {
     content = <ScheduleCheckInScreen body={scheduleEntry.body} eventAt={scheduleEntry.eventAt} initialDate={scheduleCheckIn?.dueAt ? new Date(scheduleCheckIn.dueAt) : new Date(Date.now() + 60 * 60 * 1000)} status={status} onSchedule={(date) => void handleScheduleCheckIn(date)} onBack={closeScheduleCheckIn} />;
   } else if (route.screen === "composer") {
@@ -324,7 +338,7 @@ export default function App() {
     content = <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}><Text style={styles.wordmark}>Foresight</Text></View>
       <ScreenTabs screen={topLevel} onChange={(screen) => { setRoute(topLevelRoute(screen)); setStatus(""); }} />
-      {topLevel === "journal" ? <JournalScreen journal={journal} historyCategoryId={historyCategoryId} status={status} onNewLog={openComposerForNewLog} onHistoryFilterChange={setHistoryCategoryId} onOpenEntry={(id) => { setStatus(""); setRoute(openDetail(id)); }} onRecoveryRequest={confirmRecovery} /> : topLevel === "check-ins" ? <CheckInQueueScreen journal={journal} now={queueNow} status={status} onAnswer={openOutcomeCheckInFromQueue} onReschedule={(checkIn) => { const entry = journal.entries.find((item) => item.id === checkIn.entryId); if (entry) openScheduleCheckInForEntry(entry, checkIn, "check-ins"); }} onSkip={(checkIn) => void handleSkipDelayedCheckIn(checkIn)} /> : <TrendsScreen journal={journal} range={trendRange} selectedCategoryId={trendCategoryId} onRangeChange={setTrendRange} onCategoryChange={setTrendCategoryId} />}
+      {topLevel === "journal" ? <JournalScreen journal={journal} historyCategoryId={historyCategoryId} status={status} onNewLog={openComposerForNewLog} onHistoryFilterChange={setHistoryCategoryId} onOpenEntry={(id) => { setStatus(""); setRoute(openDetail(id)); }} onRecoveryRequest={confirmRecovery} /> : topLevel === "check-ins" ? <CheckInQueueScreen journal={journal} now={queueNow} status={status} onAnswer={openOutcomeCheckInFromQueue} onReschedule={(checkIn) => { const entry = journal.entries.find((item) => item.id === checkIn.entryId); if (entry) openScheduleCheckInForEntry(entry, checkIn, "check-ins"); }} onSkip={(checkIn) => void handleSkipDelayedCheckIn(checkIn)} /> : <TrendsScreen journal={journal} range={trendRange} selectedCategoryId={trendCategoryId} view={trendsView} outcomePhase={outcomePhase} onRangeChange={setTrendRange} onCategoryChange={setTrendCategoryId} onViewChange={(view) => { setTrendsView(view); if (view === "outcomes" && trendRange === 7) setTrendRange(30); }} onOutcomePhaseChange={setOutcomePhase} onOpenEntry={(id) => { setStatus(""); setRoute(openDetail(id)); }} />}
     </ScrollView>;
   }
 

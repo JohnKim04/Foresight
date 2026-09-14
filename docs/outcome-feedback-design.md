@@ -245,6 +245,7 @@ Implement PRs 1 through 4 in order. PR 5 and PR 6 can follow in either order. AI
 
 ## Decisions to Carry Forward
 
+- Interface copy is direct and functional. Prefer short labels such as `Optional note`, `Check in later`, and `Skip`.
 - The product measures **reported effects**, not a universal health or morality score.
 - The primary input is a five-point overall better-to-worse comparison, with an explicit uncertainty option.
 - Outcomes are attached to individual episodes and may be immediate or delayed.

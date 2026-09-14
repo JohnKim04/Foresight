@@ -115,7 +115,7 @@ test("creates, answers, and skips one-dimensional outcome check-ins", () => {
   assert.deepEqual(answered[0], { ...immediate, status: "answered", overall: 2, note: "Felt restored.", answeredAt: laterTime, updatedAt: laterTime });
   const skipped = skipOutcomeCheckIn(answered, "outcome-1", "2026-09-10T12:00:00.000Z");
   assert.deepEqual(skipped[0], { ...answered[0], status: "skipped", overall: null, answeredAt: null, updatedAt: "2026-09-10T12:00:00.000Z" });
-  assert.throws(() => createOutcomeCheckIn({ entryId: "one", phase: "delayed" }, { id: "outcome-2", createdAt: firstTime }), /follow-up time/);
+  assert.throws(() => createOutcomeCheckIn({ entryId: "one", phase: "delayed" }, { id: "outcome-2", createdAt: firstTime }), /check-in time/);
   assert.throws(() => answerOutcomeCheckIn([immediate], "outcome-1", { status: "answered" }, laterTime), /overall/);
 });
 
